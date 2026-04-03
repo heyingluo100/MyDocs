@@ -8,7 +8,7 @@ import mammoth from 'mammoth'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const contentDir = path.join(root, 'content')
-const outputJson = path.join(root, 'src', 'data', 'articles.json')
+const outputJson = path.join(root, '.content-cache', 'articles.json')
 const publicFiles = path.join(root, 'public', 'files')
 
 const md = new MarkdownIt({
@@ -164,7 +164,11 @@ async function buildArticles() {
   // Sort by date descending
   articles.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
 
-  fs.writeFileSync(outputJson, JSON.stringify(articles, null, 2))
+  // Collect all tag names (including empty folders)
+  const allTags = tagFolders.map(f => f.name)
+
+  const output = { allTags, articles }
+  fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类`)
   if (filesCopied > 0) {
     console.log(`[build-content] 📎 复制了 ${filesCopied} 个附件文件到 public/files/`)

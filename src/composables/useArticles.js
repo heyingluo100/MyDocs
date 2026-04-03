@@ -1,11 +1,34 @@
 import { ref, computed } from 'vue'
-import articlesData from '../data/articles.json'
+
+// Module-level refs (singleton, shared across all components)
+const articles = ref([])
+const tagNames = ref([])
+const loaded = ref(false)
+
+function updateData(newData) {
+  articles.value = newData.articles || []
+  tagNames.value = newData.allTags || []
+  loaded.value = true
+}
+
+// Initial load via fetch (not import, so Vite won't HMR it)
+fetch('/articles.json')
+  .then(r => r.json())
+  .then(data => updateData(data))
+  .catch(() => console.error('[useArticles] 加载 articles.json 失败'))
+
+// Listen for HMR content updates in dev mode
+if (import.meta.hot) {
+  import.meta.hot.on('content-update', (data) => {
+    console.log('[HMR] 内容更新，文档数:', data.articles?.length, '分类数:', data.allTags?.length)
+    updateData(data)
+  })
+}
 
 export function useArticles() {
-  const articles = ref(articlesData)
-
   const allTags = computed(() => {
     const tagMap = {}
+    tagNames.value.forEach(name => { tagMap[name] = 0 })
     articles.value.forEach(article => {
       article.tags.forEach(tag => {
         tagMap[tag] = (tagMap[tag] || 0) + 1
@@ -27,7 +50,8 @@ export function useArticles() {
 
   const decodeContent = (encoded) => {
     try {
-      return atob(encoded)
+      const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0))
+      return new TextDecoder('utf-8').decode(bytes)
     } catch {
       return encoded
     }
@@ -36,6 +60,7 @@ export function useArticles() {
   return {
     articles,
     allTags,
+    loaded,
     getArticlesByTag,
     getArticleBySlug,
     decodeContent
