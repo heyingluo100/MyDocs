@@ -43,7 +43,7 @@ async function processMarkdown(filePath) {
   return {
     title: frontmatter.title || path.basename(filePath, path.extname(filePath)),
     summary: frontmatter.summary || '',
-    date: frontmatter.date ? String(frontmatter.date) : getFileDate(filePath),
+    date: getFileDate(filePath),
     content: htmlContent
   }
 }
