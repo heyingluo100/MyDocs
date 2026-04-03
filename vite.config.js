@@ -20,7 +20,6 @@ function rebuildContent() {
 }
 
 export default defineConfig({
-  base: '/test1/',
   plugins: [
     vue(),
     tailwindcss(),
