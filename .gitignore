@@ -3,4 +3,4 @@ dist/
 .DS_Store
 *.local
 public/files/
-.content-cache/
+content/

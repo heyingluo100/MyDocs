@@ -71,8 +71,13 @@ async function buildArticles() {
 
   // Ensure content directory exists
   if (!fs.existsSync(contentDir)) {
+    // No content/ dir (e.g. CI environment) — use existing articles.json if available
+    if (fs.existsSync(outputJson)) {
+      console.log('[build-content] content/ 不存在，使用已有的 articles.json')
+      return
+    }
     fs.mkdirSync(contentDir, { recursive: true })
-    fs.writeFileSync(outputJson, '[]')
+    fs.writeFileSync(outputJson, JSON.stringify({ allTags: [], articles: [] }))
     console.log('[build-content] content/ 目录为空，请创建分类文件夹并放入文档。')
     return
   }
