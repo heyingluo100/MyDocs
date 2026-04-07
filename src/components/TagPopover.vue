@@ -9,7 +9,7 @@ const props = defineProps({
 })
 
 const route = useRoute()
-const { allTags, allCollections } = useArticles()
+const { allTags } = useArticles()
 
 const open = ref(false)
 const wrapperRef = ref(null)
@@ -114,25 +114,6 @@ const handleKeydown = (e) => {
             <span class="flex-1">{{ tag.name }}</span>
             <span class="text-xs text-linear-text-secondary/60">{{ tag.count }}</span>
           </router-link>
-
-          <!-- Collections section -->
-          <template v-if="allCollections.length">
-            <div class="border-t border-linear-border/30 my-2"></div>
-            <div class="px-3 py-1 text-xs text-linear-text-secondary/50">合集</div>
-            <router-link
-              v-for="col in allCollections"
-              :key="col.slug"
-              :to="`/collection/${encodeURIComponent(col.slug)}`"
-              @click="close"
-              class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all duration-300 text-linear-text-secondary hover:bg-linear-bg-tertiary hover:text-linear-text"
-            >
-              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <span class="flex-1">{{ col.tag }} / {{ col.name }}</span>
-              <span class="text-xs text-linear-text-secondary/60">{{ col.count }}</span>
-            </router-link>
-          </template>
         </nav>
       </div>
     </Transition>

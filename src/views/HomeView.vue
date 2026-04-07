@@ -5,9 +5,10 @@ import { useArticles } from '../composables/useArticles.js'
 import TagPopover from '../components/TagPopover.vue'
 import TagBottomSheet from '../components/TagBottomSheet.vue'
 import ArticleCard from '../components/ArticleCard.vue'
+import CollectionCard from '../components/CollectionCard.vue'
 
 const route = useRoute()
-const { getArticlesByTag } = useArticles()
+const { getArticlesByTag, allCollections } = useArticles()
 const showMobileSheet = ref(false)
 
 const currentTag = computed(() => {
@@ -17,6 +18,43 @@ const currentTag = computed(() => {
 const filteredArticles = computed(() => {
   return getArticlesByTag(currentTag.value)
 })
+
+// Build mixed list: standalone articles + collection groups
+const mixedItems = computed(() => {
+  const articles = filteredArticles.value
+  const items = []
+  const seenCollections = new Set()
+
+  // Collect standalone articles
+  const standaloneArticles = articles.filter(a => !a.collectionSlug)
+
+  // Collect collections relevant to current filter
+  const relevantCollections = currentTag.value
+    ? allCollections.value.filter(c => c.tag === currentTag.value)
+    : allCollections.value
+
+  // Build collection items with their articles
+  for (const col of relevantCollections) {
+    const colArticles = articles.filter(a => a.collectionSlug === col.slug)
+    if (colArticles.length === 0) continue
+    seenCollections.add(col.slug)
+    // Use the newest article's createdAt as the collection's sort date
+    const sortDate = colArticles.reduce((max, a) => a.createdAt > max ? a.createdAt : max, colArticles[0].createdAt)
+    items.push({ type: 'collection', collection: col, articles: colArticles, sortDate })
+  }
+
+  // Add standalone articles
+  for (const article of standaloneArticles) {
+    items.push({ type: 'article', article, sortDate: article.createdAt })
+  }
+
+  // Sort by creation date (newest first)
+  items.sort((a, b) => b.sortDate.localeCompare(a.sortDate))
+
+  return items
+})
+
+const totalCount = computed(() => filteredArticles.value.length)
 </script>
 
 <template>
@@ -33,7 +71,7 @@ const filteredArticles = computed(() => {
           {{ currentTag || '全部文档' }}
         </h1>
         <span class="text-sm text-linear-text-secondary">
-          {{ filteredArticles.length }} 篇
+          {{ totalCount }} 篇
         </span>
 
         <!-- Mobile filter button -->
@@ -48,12 +86,11 @@ const filteredArticles = computed(() => {
         </button>
       </div>
 
-      <div v-if="filteredArticles.length" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ArticleCard
-          v-for="article in filteredArticles"
-          :key="article.slug"
-          :article="article"
-        />
+      <div v-if="mixedItems.length" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <template v-for="item in mixedItems" :key="item.type === 'article' ? item.article.slug : item.collection.slug">
+          <ArticleCard v-if="item.type === 'article'" :article="item.article" />
+          <CollectionCard v-else :collection="item.collection" :articles="item.articles" />
+        </template>
       </div>
 
       <div v-else class="text-center py-20">
