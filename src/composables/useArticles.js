@@ -3,11 +3,13 @@ import { ref, computed } from 'vue'
 // Module-level refs (singleton, shared across all components)
 const articles = ref([])
 const tagNames = ref([])
+const collectionList = ref([])
 const loaded = ref(false)
 
 function updateData(newData) {
   articles.value = newData.articles || []
   tagNames.value = newData.allTags || []
+  collectionList.value = newData.allCollections || []
   loaded.value = true
 }
 
@@ -39,6 +41,8 @@ export function useArticles() {
       .sort((a, b) => b.count - a.count)
   })
 
+  const allCollections = computed(() => collectionList.value)
+
   const getArticlesByTag = (tag) => {
     if (!tag) return articles.value
     return articles.value.filter(a => a.tags.includes(tag))
@@ -46,6 +50,14 @@ export function useArticles() {
 
   const getArticleBySlug = (slug) => {
     return articles.value.find(a => a.slug === slug) || null
+  }
+
+  const getArticlesByCollection = (collectionSlug) => {
+    return articles.value.filter(a => a.collectionSlug === collectionSlug)
+  }
+
+  const getCollectionBySlug = (slug) => {
+    return collectionList.value.find(c => c.slug === slug) || null
   }
 
   const decodeContent = (encoded) => {
@@ -59,7 +71,21 @@ export function useArticles() {
 
   const getAdjacentArticles = (slug) => {
     const article = articles.value.find(a => a.slug === slug)
-    if (!article || !article.tags.length) return { prev: null, next: null, siblings: [] }
+    if (!article) return { prev: null, next: null, siblings: [] }
+
+    // If article is in a collection, navigate within the collection
+    if (article.collectionSlug) {
+      const siblings = articles.value.filter(a => a.collectionSlug === article.collectionSlug)
+      const index = siblings.findIndex(a => a.slug === slug)
+      return {
+        prev: index > 0 ? siblings[index - 1] : null,
+        next: index < siblings.length - 1 ? siblings[index + 1] : null,
+        siblings
+      }
+    }
+
+    // Otherwise navigate within the same tag
+    if (!article.tags.length) return { prev: null, next: null, siblings: [] }
     const tag = article.tags[0]
     const siblings = articles.value.filter(a => a.tags.includes(tag))
     const index = siblings.findIndex(a => a.slug === slug)
@@ -73,9 +99,12 @@ export function useArticles() {
   return {
     articles,
     allTags,
+    allCollections,
     loaded,
     getArticlesByTag,
     getArticleBySlug,
+    getArticlesByCollection,
+    getCollectionBySlug,
     getAdjacentArticles,
     decodeContent
   }

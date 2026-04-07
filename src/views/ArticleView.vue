@@ -274,6 +274,13 @@ const adjacent = computed(() => {
         >
           {{ tag }}
         </span>
+        <router-link
+          v-if="displayArticle.collection"
+          :to="`/collection/${encodeURIComponent(displayArticle.collectionSlug)}`"
+          class="text-xs px-2 py-0.5 rounded-full bg-linear-accent/10 text-linear-accent border border-linear-accent/20 hover:bg-linear-accent/20 transition-colors"
+        >
+          {{ displayArticle.collection }}
+        </router-link>
       </div>
     </header>
 

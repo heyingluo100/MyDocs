@@ -164,7 +164,89 @@ async function buildArticles() {
   }
 
   const articles = []
+  const collections = []
   let filesCopied = 0
+
+  // Process a single file and return an article entry (or null)
+  async function processFile(filePath, tag, collection, collectionSlug) {
+    const file = path.basename(filePath)
+    const ext = path.extname(file).toLowerCase()
+    const baseName = path.basename(file, ext)
+
+    if (file.startsWith('~$')) return null
+    if (fs.statSync(filePath).isDirectory()) return null
+
+    const slugBase = collection
+      ? slugify(tag + '-' + collection + '-' + baseName)
+      : slugify(tag + '-' + baseName)
+    const slug = slugBase || baseName
+
+    if (MARKDOWN_EXTS.includes(ext)) {
+      try {
+        const result = await processMarkdown(filePath)
+        return {
+          slug, title: result.title, tags: [tag],
+          collection: collection || null, collectionSlug: collectionSlug || null,
+          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          summary: result.summary, files: [],
+          content: Buffer.from(result.content).toString('base64')
+        }
+      } catch (err) {
+        console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+      }
+    } else if (WORD_EXTS.includes(ext)) {
+      try {
+        const result = await processDocx(filePath)
+        return {
+          slug, title: result.title, tags: [tag],
+          collection: collection || null, collectionSlug: collectionSlug || null,
+          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          summary: result.summary, files: [],
+          content: Buffer.from(result.content).toString('base64')
+        }
+      } catch (err) {
+        console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+      }
+    } else if (DOC_EXTS.includes(ext)) {
+      try {
+        const result = await processDoc(filePath)
+        return {
+          slug, title: result.title, tags: [tag],
+          collection: collection || null, collectionSlug: collectionSlug || null,
+          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          summary: result.summary, files: [],
+          content: Buffer.from(result.content).toString('base64')
+        }
+      } catch (err) {
+        console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+      }
+    } else if (TEXT_EXTS.includes(ext)) {
+      try {
+        const result = processText(filePath)
+        return {
+          slug, title: result.title, tags: [tag],
+          collection: collection || null, collectionSlug: collectionSlug || null,
+          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          summary: result.summary, files: [],
+          content: Buffer.from(result.content).toString('base64')
+        }
+      } catch (err) {
+        console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+      }
+    } else if (OTHER_FILE_EXTS.includes(ext)) {
+      fs.copyFileSync(filePath, path.join(publicFiles, file))
+      filesCopied++
+      return {
+        slug, title: baseName, tags: [tag],
+        collection: collection || null, collectionSlug: collectionSlug || null,
+        ...getFileDates(filePath),
+        summary: `${ext.replace('.', '').toUpperCase()} 文件`,
+        files: [file],
+        content: Buffer.from(`<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`).toString('base64')
+      }
+    }
+    return null
+  }
 
   // Scan top-level directories in content/ — each folder is a tag
   const entries = fs.readdirSync(contentDir, { withFileTypes: true })
@@ -183,112 +265,32 @@ async function buildArticles() {
 
     for (const file of files) {
       const filePath = path.join(folderPath, file)
-      const ext = path.extname(file).toLowerCase()
-      const baseName = path.basename(file, ext)
 
-      // Skip directories inside tag folders
-      if (fs.statSync(filePath).isDirectory()) continue
+      // Sub-directory = collection
+      if (fs.statSync(filePath).isDirectory()) {
+        const collectionName = file
+        const colSlug = slugify(tag + '-' + collectionName) || collectionName
+        const subFiles = fs.readdirSync(filePath).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+        let count = 0
 
-      // Skip Word temporary files (~$*.docx)
-      if (file.startsWith('~$')) continue
-
-      // Process Markdown files
-      if (MARKDOWN_EXTS.includes(ext)) {
-        try {
-          const result = await processMarkdown(filePath)
-          const slug = slugify(tag + '-' + baseName) || baseName
-          articles.push({
-            slug,
-            title: result.title,
-            tags: [tag],
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt,
-            summary: result.summary,
-            files: [],
-            content: Buffer.from(result.content).toString('base64')
-          })
-        } catch (err) {
-          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+        for (const subFile of subFiles) {
+          const subFilePath = path.join(filePath, subFile)
+          const article = await processFile(subFilePath, tag, collectionName, colSlug)
+          if (article) {
+            articles.push(article)
+            count++
+          }
         }
-      }
 
-      // Process Word .docx files
-      else if (WORD_EXTS.includes(ext)) {
-        try {
-          const result = await processDocx(filePath)
-          const slug = slugify(tag + '-' + baseName) || baseName
-          articles.push({
-            slug,
-            title: result.title,
-            tags: [tag],
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt,
-            summary: result.summary,
-            files: [],
-            content: Buffer.from(result.content).toString('base64')
-          })
-        } catch (err) {
-          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+        if (count > 0) {
+          collections.push({ name: collectionName, slug: colSlug, tag, count })
         }
+        continue
       }
 
-      // Process Word .doc files (legacy format)
-      else if (DOC_EXTS.includes(ext)) {
-        try {
-          const result = await processDoc(filePath)
-          const slug = slugify(tag + '-' + baseName) || baseName
-          articles.push({
-            slug,
-            title: result.title,
-            tags: [tag],
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt,
-            summary: result.summary,
-            files: [],
-            content: Buffer.from(result.content).toString('base64')
-          })
-        } catch (err) {
-          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
-        }
-      }
-
-      // Process text files
-      else if (TEXT_EXTS.includes(ext)) {
-        try {
-          const result = processText(filePath)
-          const slug = slugify(tag + '-' + baseName) || baseName
-          articles.push({
-            slug,
-            title: result.title,
-            tags: [tag],
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt,
-            summary: result.summary,
-            files: [],
-            content: Buffer.from(result.content).toString('base64')
-          })
-        } catch (err) {
-          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
-        }
-      }
-
-      // Copy other files (PDF, Excel, etc.) to public/files for preview/download
-      else if (OTHER_FILE_EXTS.includes(ext)) {
-        fs.copyFileSync(filePath, path.join(publicFiles, file))
-        filesCopied++
-
-        // Create an entry that links to the file
-        const slug = slugify(tag + '-' + baseName) || baseName
-        articles.push({
-          slug,
-          title: baseName,
-          tags: [tag],
-          ...getFileDates(filePath),
-          summary: `${ext.replace('.', '').toUpperCase()} 文件`,
-          files: [file],
-          content: Buffer.from(`<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`).toString('base64')
-        })
-      }
+      // Regular file = standalone article
+      const article = await processFile(filePath, tag, null, null)
+      if (article) articles.push(article)
     }
   }
 
@@ -298,9 +300,9 @@ async function buildArticles() {
   // Collect all tag names (including empty folders)
   const allTags = tagFolders.map(f => f.name)
 
-  const output = { allTags, articles }
+  const output = { allTags, allCollections: collections, articles }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
-  console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类`)
+  console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
   if (filesCopied > 0) {
     console.log(`[build-content] 📎 复制了 ${filesCopied} 个附件文件到 public/files/`)
   }

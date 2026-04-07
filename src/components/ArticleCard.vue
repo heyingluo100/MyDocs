@@ -1,7 +1,17 @@
 <script setup>
+import { useRouter } from 'vue-router'
+
 defineProps({
   article: { type: Object, required: true }
 })
+
+const router = useRouter()
+
+const handleCollectionClick = (e, collectionSlug) => {
+  e.preventDefault()
+  e.stopPropagation()
+  router.push(`/collection/${encodeURIComponent(collectionSlug)}`)
+}
 </script>
 
 <template>
@@ -9,7 +19,7 @@ defineProps({
     :to="`/article/${article.slug}`"
     class="block bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-all duration-300 group"
   >
-    <div class="flex items-center gap-2 mb-2">
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
       <span
         v-for="tag in article.tags"
         :key="tag"
@@ -17,6 +27,14 @@ defineProps({
       >
         {{ tag }}
       </span>
+      <a
+        v-if="article.collection"
+        href="#"
+        @click="handleCollectionClick($event, article.collectionSlug)"
+        class="text-xs px-2 py-0.5 rounded-full bg-linear-accent/10 text-linear-accent border border-linear-accent/20 hover:bg-linear-accent/20 transition-colors"
+      >
+        {{ article.collection }}
+      </a>
     </div>
     <h3 class="text-base font-semibold text-linear-text group-hover:text-linear-accent transition-colors mb-2">
       {{ article.title }}

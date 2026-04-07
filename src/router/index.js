@@ -17,6 +17,11 @@ const routes = [
     component: () => import('../views/ArticleView.vue')
   },
   {
+    path: '/collection/:slug',
+    name: 'collection',
+    component: () => import('../views/CollectionView.vue')
+  },
+  {
     path: '/file/:filename',
     name: 'file',
     component: () => import('../views/FileView.vue')
