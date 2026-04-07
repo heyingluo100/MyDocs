@@ -7,7 +7,7 @@ import { useClickOutside } from '../composables/useClickOutside.js'
 import ThemeToggle from './ThemeToggle.vue'
 
 const { theme } = useTheme()
-const { articles } = useArticles()
+const { articles, allCollections } = useArticles()
 const route = useRoute()
 const router = useRouter()
 
@@ -15,15 +15,36 @@ const searchQuery = ref('')
 const showMobileSearch = ref(false)
 const searchWrapperRef = ref(null)
 
+const currentTag = computed(() => {
+  return route.params.tag ? decodeURIComponent(route.params.tag) : ''
+})
+
+const currentCollectionSlug = computed(() => {
+  return route.name === 'collection' && route.params.slug ? decodeURIComponent(route.params.slug) : ''
+})
+
 const searchResults = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return []
-  return articles.value
+  let pool = articles.value
+  if (currentCollectionSlug.value) {
+    pool = pool.filter(a => a.collectionSlug === currentCollectionSlug.value)
+  } else if (currentTag.value) {
+    pool = pool.filter(a => a.tags.includes(currentTag.value))
+  }
+  return pool
     .filter(a => a.title.toLowerCase().includes(q))
     .slice(0, 8)
 })
 
 const hasQuery = computed(() => searchQuery.value.trim().length > 0)
+const searchPlaceholder = computed(() => {
+  if (currentCollectionSlug.value) {
+    const col = allCollections.value.find(c => c.slug === currentCollectionSlug.value)
+    return col ? `在「${col.name}」中搜索...` : '搜索文档...'
+  }
+  return currentTag.value ? `在「${currentTag.value}」中搜索...` : '搜索文档...'
+})
 
 const clearSearch = () => {
   searchQuery.value = ''
@@ -60,7 +81,7 @@ watch(() => route.fullPath, () => {
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="搜索文档..."
+              :placeholder="searchPlaceholder"
               class="w-48 focus:w-64 pl-8 pr-3 py-1.5 text-sm bg-linear-bg-secondary border border-linear-border/50 rounded-lg text-linear-text placeholder:text-linear-text-secondary/50 focus:outline-none focus:border-linear-accent/50 transition-all duration-300"
             />
           </div>
@@ -116,7 +137,7 @@ watch(() => route.fullPath, () => {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="搜索文档..."
+            :placeholder="searchPlaceholder"
             class="w-full pl-9 pr-3 py-2 text-sm bg-linear-bg-secondary border border-linear-border/50 rounded-xl text-linear-text placeholder:text-linear-text-secondary/50 focus:outline-none focus:border-linear-accent/50 transition-colors"
           />
         </div>
