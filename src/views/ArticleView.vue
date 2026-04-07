@@ -150,6 +150,14 @@ watch(articles, () => {
   }
 })
 
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
+
 const handleConfirmDeleted = () => {
   showDeletedDialog.value = false
   router.push('/')
@@ -223,15 +231,16 @@ const adjacent = computed(() => {
     >
       <div class="max-w-7xl mx-auto px-6 h-12 flex items-center gap-3">
         <!-- Back button -->
-        <router-link
-          to="/"
+        <a
+          href="#"
+          @click.prevent="goBack"
           class="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 -ml-2.5 rounded-lg text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary transition-all duration-300"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
           </svg>
           <span class="text-xs">返回</span>
-        </router-link>
+        </a>
 
         <!-- Divider -->
         <div class="w-px h-4 bg-linear-border/50 shrink-0"></div>
@@ -248,15 +257,16 @@ const adjacent = computed(() => {
   <!-- Show snapshot content if user chose "later", otherwise show live content -->
   <div v-if="displayArticle" class="max-w-3xl mx-auto">
     <!-- Back button -->
-    <router-link
-      to="/"
+    <a
+      href="#"
+      @click.prevent="goBack"
       class="inline-flex items-center gap-2 text-sm text-linear-text-secondary hover:text-linear-text transition-colors mb-6"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
       </svg>
       返回列表
-    </router-link>
+    </a>
 
     <!-- Article header -->
     <header ref="headerRef" v-if="displayArticle" class="mb-8">

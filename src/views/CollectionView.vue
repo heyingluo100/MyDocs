@@ -1,11 +1,20 @@
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import ArticleCard from '../components/ArticleCard.vue'
 
 const route = useRoute()
+const router = useRouter()
 const { getArticlesByCollection, getCollectionBySlug } = useArticles()
+
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const collectionSlug = computed(() => decodeURIComponent(route.params.slug || ''))
 const collection = computed(() => getCollectionBySlug(collectionSlug.value))
@@ -15,15 +24,16 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
 <template>
   <div class="max-w-5xl mx-auto">
     <!-- Back button -->
-    <router-link
-      to="/"
+    <a
+      href="#"
+      @click.prevent="goBack"
       class="inline-flex items-center gap-2 text-sm text-linear-text-secondary hover:text-linear-text transition-colors mb-6"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
       </svg>
       返回列表
-    </router-link>
+    </a>
 
     <div v-if="collection">
       <!-- Collection header -->
