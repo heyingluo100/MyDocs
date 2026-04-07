@@ -1,14 +1,16 @@
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadHistory } from '../composables/useReadHistory.js'
 import ArticleContent from '../components/ArticleContent.vue'
 
-// Reading progress + sticky bar
+// Reading progress + sticky bar + position saving
 const readingProgress = ref(0)
 const showStickyBar = ref(false)
 const headerRef = ref(null)
+const currentSlug = ref('')
+let lastSaveTime = 0
 const updateProgress = () => {
   const scrollTop = window.scrollY
   const docHeight = document.documentElement.scrollHeight - window.innerHeight
@@ -17,19 +19,33 @@ const updateProgress = () => {
   if (headerRef.value) {
     showStickyBar.value = headerRef.value.getBoundingClientRect().bottom < 0
   }
+  // Throttled position save (every 3s)
+  const now = Date.now()
+  if (now - lastSaveTime > 3000 && currentSlug.value) {
+    lastSaveTime = now
+    saveReadingPosition(currentSlug.value, readingProgress.value)
+  }
 }
 onMounted(() => window.addEventListener('scroll', updateProgress, { passive: true }))
-onBeforeUnmount(() => window.removeEventListener('scroll', updateProgress))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', updateProgress)
+  // Save position on leave (use currentSlug, not route — route has already changed)
+  if (currentSlug.value) {
+    saveReadingPosition(currentSlug.value, readingProgress.value)
+  }
+})
 
 const route = useRoute()
 const router = useRouter()
 const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
-const { hasUpdatedSinceLastRead, markAsRead } = useReadHistory()
+const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 
 // Dialog states
 const showDeletedDialog = ref(false)
 const showUpdatedDialog = ref(false)
 const showTocDialog = ref(false)
+const showContinueDialog = ref(false)
+const savedProgress = ref(0)
 const deletedTitle = ref('')
 
 // 'realtime' = 正在看时后台改了, 'history' = 之前读过，再打开发现有更新
@@ -54,11 +70,19 @@ const htmlContent = computed(() => {
 let isInitialLoad = true
 
 // Route change: freeze new article or detect history update
-watch(() => route.params.slug, (newSlug) => {
+watch(() => route.params.slug, (newSlug, oldSlug) => {
+  // Save position of previous article before switching
+  if (oldSlug && readingProgress.value > 0) {
+    saveReadingPosition(oldSlug, readingProgress.value)
+  }
+
   if (!newSlug) return
+  currentSlug.value = newSlug
 
   // Reset state
   showUpdatedDialog.value = false
+  showContinueDialog.value = false
+  savedProgress.value = 0
   frozenContent.value = ''
   frozenArticle.value = null
   pendingArticle.value = null
@@ -71,11 +95,20 @@ watch(() => route.params.slug, (newSlug) => {
     updateReason.value = 'history'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
+    // Content changed — old position is meaningless
+    clearReadingPosition(newSlug)
   } else {
     // Page refresh, first visit, or no changes — show latest directly
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
     markAsRead(newSlug, current.content)
+
+    // Check for saved reading position
+    const pos = getReadingPosition(newSlug)
+    if (pos) {
+      savedProgress.value = pos
+      showContinueDialog.value = true
+    }
   }
   isInitialLoad = false
 }, { immediate: true })
@@ -144,6 +177,23 @@ const handleRefreshLater = () => {
     // Don't markAsRead — user chose "later", next visit will ask again
   }
   pendingArticle.value = null
+}
+
+// Continue reading: scroll to saved position
+const handleContinueReading = () => {
+  showContinueDialog.value = false
+  nextTick(() => {
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight
+    const targetY = Math.round((savedProgress.value / 100) * docHeight)
+    window.scrollTo({ top: targetY, behavior: 'smooth' })
+  })
+  if (route.params.slug) clearReadingPosition(route.params.slug)
+}
+
+// Start from beginning
+const handleStartFresh = () => {
+  showContinueDialog.value = false
+  if (route.params.slug) clearReadingPosition(route.params.slug)
 }
 
 // Display article: use frozen snapshot
@@ -407,6 +457,42 @@ const adjacent = computed(() => {
               class="flex-1 py-2.5 rounded-xl bg-linear-accent text-white text-sm font-medium hover:bg-linear-accent-hover transition-colors"
             >
               立即查看
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Continue reading dialog -->
+    <Transition name="fade">
+      <div v-if="showContinueDialog" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+        <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-full bg-linear-accent/10 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-linear-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-linear-text">继续阅读</h3>
+              <p class="text-sm text-linear-text-secondary mt-1">
+                上次阅读到 {{ savedProgress }}%，是否跳转到上次位置？
+              </p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="handleStartFresh"
+              class="flex-1 py-2.5 rounded-xl bg-linear-bg-secondary border border-linear-border text-sm text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+            >
+              从头开始
+            </button>
+            <button
+              @click="handleContinueReading"
+              class="flex-1 py-2.5 rounded-xl bg-linear-accent text-white text-sm font-medium hover:bg-linear-accent-hover transition-colors"
+            >
+              继续阅读
             </button>
           </div>
         </div>
