@@ -172,24 +172,26 @@ async function buildArticles() {
   let filesCopied = 0
 
   // Process a single file and return an article entry (or null)
-  async function processFile(filePath, tag, collection, collectionSlug) {
+  async function processFile(filePath, tags, collection, collectionSlug) {
     const file = path.basename(filePath)
     const ext = path.extname(file).toLowerCase()
     const baseName = path.basename(file, ext)
 
     if (file.startsWith('~$')) return null
+    if (file === '.tags') return null
     if (fs.statSync(filePath).isDirectory()) return null
 
+    const primaryTag = tags[0]
     const slugBase = collection
-      ? slugify(tag + '-' + collection + '-' + baseName)
-      : slugify(tag + '-' + baseName)
+      ? slugify(primaryTag + '-' + collection + '-' + baseName)
+      : slugify(primaryTag + '-' + baseName)
     const slug = slugBase || baseName
 
     if (MARKDOWN_EXTS.includes(ext)) {
       try {
         const result = await processMarkdown(filePath)
         return {
-          slug, title: result.title, tags: [tag],
+          slug, title: result.title, tags,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -202,7 +204,7 @@ async function buildArticles() {
       try {
         const result = await processDocx(filePath)
         return {
-          slug, title: result.title, tags: [tag],
+          slug, title: result.title, tags,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -215,7 +217,7 @@ async function buildArticles() {
       try {
         const result = await processDoc(filePath)
         return {
-          slug, title: result.title, tags: [tag],
+          slug, title: result.title, tags,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -228,7 +230,7 @@ async function buildArticles() {
       try {
         const result = processText(filePath)
         return {
-          slug, title: result.title, tags: [tag],
+          slug, title: result.title, tags,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -241,7 +243,7 @@ async function buildArticles() {
       fs.copyFileSync(filePath, path.join(publicFiles, file))
       filesCopied++
       return {
-        slug, title: baseName, tags: [tag],
+        slug, title: baseName, tags: [...tags],
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
@@ -262,6 +264,19 @@ async function buildArticles() {
     return
   }
 
+  // Read extra tags from a .tags file (one tag per line)
+  function readExtraTags(tagsFilePath) {
+    try {
+      if (!fs.existsSync(tagsFilePath)) return []
+      return fs.readFileSync(tagsFilePath, 'utf-8')
+        .split(/\r?\n/)
+        .map(t => t.trim())
+        .filter(t => t.length > 0)
+    } catch {
+      return []
+    }
+  }
+
   for (const folder of tagFolders) {
     const tag = folder.name
     const folderPath = path.join(contentDir, tag)
@@ -275,11 +290,15 @@ async function buildArticles() {
         const collectionName = file
         const colSlug = slugify(tag + '-' + collectionName) || collectionName
         const subFiles = fs.readdirSync(filePath).sort((a, b) => a.localeCompare(b, 'zh-CN'))
-        let count = 0
 
+        // Read .tags file inside collection folder for extra tags
+        const extraTags = readExtraTags(path.join(filePath, '.tags'))
+        const collectionTags = [tag, ...extraTags.filter(t => t !== tag)]
+
+        let count = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
-          const article = await processFile(subFilePath, tag, collectionName, colSlug)
+          const article = await processFile(subFilePath, collectionTags, collectionName, colSlug)
           if (article) {
             articles.push(article)
             count++
@@ -292,8 +311,17 @@ async function buildArticles() {
         continue
       }
 
+      // Skip .tags files at tag folder level
+      if (file === '.tags') continue
+
+      // Read per-file extra tags (e.g. "文件名.tags" for "文件名.md")
+      const ext = path.extname(file).toLowerCase()
+      const baseName = path.basename(file, ext)
+      const perFileTags = readExtraTags(path.join(folderPath, baseName + '.tags'))
+      const fileTags = [tag, ...perFileTags.filter(t => t !== tag)]
+
       // Regular file = standalone article
-      const article = await processFile(filePath, tag, null, null)
+      const article = await processFile(filePath, fileTags, null, null)
       if (article) articles.push(article)
     }
   }
