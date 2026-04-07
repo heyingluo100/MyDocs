@@ -1,9 +1,25 @@
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadHistory } from '../composables/useReadHistory.js'
 import ArticleContent from '../components/ArticleContent.vue'
+
+// Reading progress + sticky bar
+const readingProgress = ref(0)
+const showStickyBar = ref(false)
+const headerRef = ref(null)
+const updateProgress = () => {
+  const scrollTop = window.scrollY
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight
+  readingProgress.value = docHeight > 0 ? Math.min(Math.round((scrollTop / docHeight) * 100), 100) : 0
+  // Show sticky bar when article header scrolls out of viewport
+  if (headerRef.value) {
+    showStickyBar.value = headerRef.value.getBoundingClientRect().bottom < 0
+  }
+}
+onMounted(() => window.addEventListener('scroll', updateProgress, { passive: true }))
+onBeforeUnmount(() => window.removeEventListener('scroll', updateProgress))
 
 const route = useRoute()
 const router = useRouter()
@@ -141,6 +157,43 @@ const adjacent = computed(() => {
 </script>
 
 <template>
+  <!-- Reading progress bar -->
+  <div
+    v-if="displayArticle"
+    class="fixed top-0 left-0 z-50 h-0.5 bg-linear-accent transition-[width] duration-150 ease-out"
+    :style="{ width: readingProgress + '%' }"
+  ></div>
+
+  <!-- Sticky mini bar (appears when header scrolls out) -->
+  <Transition name="sticky-bar">
+    <div
+      v-if="showStickyBar && displayArticle"
+      class="fixed top-0 left-0 right-0 z-40 bg-linear-bg/80 backdrop-blur-md border-b border-linear-border/30 shadow-sm"
+    >
+      <div class="max-w-7xl mx-auto px-6 h-12 flex items-center gap-3">
+        <!-- Back button -->
+        <router-link
+          to="/"
+          class="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 -ml-2.5 rounded-lg text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary transition-all duration-300"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+          </svg>
+          <span class="text-xs">返回</span>
+        </router-link>
+
+        <!-- Divider -->
+        <div class="w-px h-4 bg-linear-border/50 shrink-0"></div>
+
+        <!-- Title -->
+        <span class="text-sm font-medium text-linear-text truncate flex-1">{{ displayArticle.title }}</span>
+
+        <!-- Progress percentage -->
+        <span class="shrink-0 text-xs tabular-nums text-linear-text-secondary/70">{{ readingProgress }}%</span>
+      </div>
+    </div>
+  </Transition>
+
   <!-- Show snapshot content if user chose "later", otherwise show live content -->
   <div v-if="displayArticle" class="max-w-3xl mx-auto">
     <!-- Back button -->
@@ -155,7 +208,7 @@ const adjacent = computed(() => {
     </router-link>
 
     <!-- Article header -->
-    <header v-if="displayArticle" class="mb-8">
+    <header ref="headerRef" v-if="displayArticle" class="mb-8">
       <h1 class="text-2xl font-bold text-linear-text mb-3">{{ displayArticle.title }}</h1>
       <div class="flex items-center gap-3 flex-wrap">
         <span v-if="displayArticle.date" class="text-sm text-linear-text-secondary">
@@ -378,5 +431,13 @@ const adjacent = computed(() => {
 .slide-up-enter-from,
 .slide-up-leave-to {
   transform: translateY(100%);
+}
+.sticky-bar-enter-active,
+.sticky-bar-leave-active {
+  transition: transform 0.3s ease;
+}
+.sticky-bar-enter-from,
+.sticky-bar-leave-to {
+  transform: translateY(-100%);
 }
 </style>
