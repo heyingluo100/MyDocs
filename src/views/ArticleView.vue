@@ -28,6 +28,15 @@ const htmlContent = computed(() => {
 
 // Track article changes
 let hadArticle = false
+
+// Reset frozen state when navigating to a different article
+watch(() => route.params.slug, () => {
+  hadArticle = false
+  frozenContent.value = ''
+  frozenArticle.value = null
+  showUpdatedDialog.value = false
+})
+
 watch(article, (newVal, oldVal) => {
   // Article deleted
   if (hadArticle && !newVal && oldVal) {
@@ -36,15 +45,15 @@ watch(article, (newVal, oldVal) => {
     return
   }
 
-  // First load: freeze initial content
-  if (newVal && !hadArticle) {
+  // First load or navigated to a different article: freeze content
+  if (newVal && (!hadArticle || newVal.slug !== frozenArticle.value?.slug)) {
     hadArticle = true
     frozenContent.value = newVal.content
     frozenArticle.value = { ...newVal }
     return
   }
 
-  // Article content changed while viewing
+  // Same article, content changed while viewing
   if (newVal && hadArticle && newVal.content !== frozenContent.value) {
     showUpdatedDialog.value = true
   }
@@ -56,7 +65,7 @@ watch(articles, () => {
   if (!current && hadArticle) {
     deletedTitle.value = frozenArticle.value?.title || route.params.slug
     showDeletedDialog.value = true
-  } else if (current && hadArticle && current.content !== frozenContent.value) {
+  } else if (current && hadArticle && current.slug === frozenArticle.value?.slug && current.content !== frozenContent.value) {
     showUpdatedDialog.value = true
   }
 })

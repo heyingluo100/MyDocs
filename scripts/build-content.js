@@ -166,8 +166,8 @@ async function buildArticles() {
     }
   }
 
-  // Sort by date descending
-  articles.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  // Sort by title (Chinese pinyin order)
+  articles.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'))
 
   // Collect all tag names (including empty folders)
   const allTags = tagFolders.map(f => f.name)
