@@ -54,6 +54,10 @@ async function getDocxDates(filePath) {
   }
 }
 
+function trimTrailingEmpty(html) {
+  return html.replace(/(\s*<p>(\s|<br\s*\/?>|&nbsp;)*<\/p>)*\s*$/gi, '')
+}
+
 function slugify(str) {
   return str
     .toLowerCase()
@@ -71,7 +75,7 @@ async function processMarkdown(filePath) {
     title: frontmatter.title || path.basename(filePath, path.extname(filePath)),
     summary: frontmatter.summary || '',
     ...getFileDates(filePath),
-    content: htmlContent
+    content: trimTrailingEmpty(htmlContent)
   }
 }
 
@@ -102,7 +106,7 @@ async function processDocx(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...dates,
-    content: htmlContent
+    content: trimTrailingEmpty(htmlContent)
   }
 }
 
@@ -123,7 +127,7 @@ async function processDoc(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...getFileDates(filePath),
-    content: htmlContent
+    content: trimTrailingEmpty(htmlContent)
   }
 }
 
@@ -141,7 +145,7 @@ function processText(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...getFileDates(filePath),
-    content: htmlContent
+    content: trimTrailingEmpty(htmlContent)
   }
 }
 
