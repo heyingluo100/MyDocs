@@ -73,23 +73,21 @@ export function useArticles() {
     const article = articles.value.find(a => a.slug === slug)
     if (!article) return { prev: null, next: null, siblings: [] }
 
-    // If article is in a collection with multiple articles, navigate within the collection
+    // If article is in a collection, navigate within the collection only
     if (article.collectionSlug) {
       const siblings = articles.value.filter(a => a.collectionSlug === article.collectionSlug)
-      if (siblings.length > 1) {
-        const index = siblings.findIndex(a => a.slug === slug)
-        return {
-          prev: index > 0 ? siblings[index - 1] : null,
-          next: index < siblings.length - 1 ? siblings[index + 1] : null,
-          siblings
-        }
+      const index = siblings.findIndex(a => a.slug === slug)
+      return {
+        prev: index > 0 ? siblings[index - 1] : null,
+        next: index < siblings.length - 1 ? siblings[index + 1] : null,
+        siblings
       }
     }
 
-    // Otherwise navigate within the same tag
+    // Otherwise navigate within the same tag (standalone articles only)
     if (!article.tags.length) return { prev: null, next: null, siblings: [] }
     const tag = article.tags[0]
-    const siblings = articles.value.filter(a => a.tags.includes(tag))
+    const siblings = articles.value.filter(a => a.tags.includes(tag) && !a.collectionSlug)
     const index = siblings.findIndex(a => a.slug === slug)
     return {
       prev: index > 0 ? siblings[index - 1] : null,
