@@ -306,7 +306,7 @@ async function buildArticles() {
         }
 
         if (count > 0) {
-          collections.push({ name: collectionName, slug: colSlug, tag, count })
+          collections.push({ name: collectionName, slug: colSlug, tag, tags: collectionTags, count })
         }
         continue
       }
@@ -329,8 +329,10 @@ async function buildArticles() {
   // Sort by creation date (newest first)
   articles.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
-  // Collect all tag names (including empty folders)
-  const allTags = tagFolders.map(f => f.name)
+  // Collect all tag names (including empty folders + extra tags from .tags files)
+  const tagSet = new Set(tagFolders.map(f => f.name))
+  articles.forEach(a => a.tags.forEach(t => tagSet.add(t)))
+  const allTags = [...tagSet]
 
   const output = { allTags, allCollections: collections, articles }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))

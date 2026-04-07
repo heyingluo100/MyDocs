@@ -30,7 +30,7 @@ const mixedItems = computed(() => {
 
   // Collect collections relevant to current filter
   const relevantCollections = currentTag.value
-    ? allCollections.value.filter(c => c.tag === currentTag.value)
+    ? allCollections.value.filter(c => (c.tags || [c.tag]).includes(currentTag.value))
     : allCollections.value
 
   // Build collection items with their articles

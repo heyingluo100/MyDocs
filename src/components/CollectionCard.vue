@@ -18,9 +18,13 @@ const latestTitle = props.articles.length ? props.articles[props.articles.length
 
     <!-- Main card -->
     <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-all duration-300">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="text-xs px-2 py-0.5 rounded-full bg-linear-bg-tertiary text-linear-text-secondary border border-linear-border/30">
-          {{ collection.tag }}
+      <div class="flex items-center gap-2 mb-2 flex-wrap">
+        <span
+          v-for="t in (collection.tags || [collection.tag])"
+          :key="t"
+          class="text-xs px-2 py-0.5 rounded-full bg-linear-bg-tertiary text-linear-text-secondary border border-linear-border/30"
+        >
+          {{ t }}
         </span>
         <span class="text-xs px-2 py-0.5 rounded-full bg-linear-accent/10 text-linear-accent border border-linear-accent/20">
           {{ collection.count }} 篇

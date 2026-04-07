@@ -34,12 +34,14 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
           </svg>
           <h1 class="text-2xl font-bold text-linear-text">{{ collection.name }}</h1>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
           <router-link
-            :to="`/tag/${encodeURIComponent(collection.tag)}`"
+            v-for="t in (collection.tags || [collection.tag])"
+            :key="t"
+            :to="`/tag/${encodeURIComponent(t)}`"
             class="text-xs px-2 py-0.5 rounded-full bg-linear-bg-tertiary text-linear-text-secondary border border-linear-border/30 hover:text-linear-accent transition-colors"
           >
-            {{ collection.tag }}
+            {{ t }}
           </router-link>
           <span class="text-sm text-linear-text-secondary">{{ collection.count }} 篇</span>
         </div>
