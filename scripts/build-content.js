@@ -20,7 +20,8 @@ const md = new MarkdownIt({
 // Supported file extensions
 const MARKDOWN_EXTS = ['.md', '.markdown']
 const WORD_EXTS = ['.docx']
-const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.txt', '.csv']
+const TEXT_EXTS = ['.txt']
+const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
 function getFileDate(filePath) {
   const stat = fs.statSync(filePath)
@@ -61,6 +62,21 @@ async function processDocx(filePath) {
     summary: summary.length >= 100 ? summary + '...' : summary,
     date: getFileDate(filePath),
     content: result.value
+  }
+}
+
+function processText(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  const title = path.basename(filePath, path.extname(filePath))
+  const summary = raw.substring(0, 100).trim()
+  // Convert plain text to HTML: escape HTML entities, preserve line breaks
+  const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const htmlContent = escaped.split(/\r?\n/).map(line => `<p>${line || '&nbsp;'}</p>`).join('\n')
+  return {
+    title,
+    summary: summary.length >= 100 ? summary + '...' : summary,
+    date: getFileDate(filePath),
+    content: htmlContent
   }
 }
 
@@ -131,6 +147,25 @@ async function buildArticles() {
       else if (WORD_EXTS.includes(ext)) {
         try {
           const result = await processDocx(filePath)
+          const slug = slugify(tag + '-' + baseName) || baseName
+          articles.push({
+            slug,
+            title: result.title,
+            tags: [tag],
+            date: result.date,
+            summary: result.summary,
+            files: [],
+            content: Buffer.from(result.content).toString('base64')
+          })
+        } catch (err) {
+          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+        }
+      }
+
+      // Process text files
+      else if (TEXT_EXTS.includes(ext)) {
+        try {
+          const result = processText(filePath)
           const slug = slugify(tag + '-' + baseName) || baseName
           articles.push({
             slug,

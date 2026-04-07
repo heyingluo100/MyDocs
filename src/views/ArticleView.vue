@@ -1,12 +1,14 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
+import { useReadHistory } from '../composables/useReadHistory.js'
 import ArticleContent from '../components/ArticleContent.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
+const { hasUpdatedSinceLastRead, markAsRead } = useReadHistory()
 
 // Dialog states
 const showDeletedDialog = ref(false)
@@ -14,58 +16,76 @@ const showUpdatedDialog = ref(false)
 const showTocDialog = ref(false)
 const deletedTitle = ref('')
 
+// 'realtime' = 正在看时后台改了, 'history' = 之前读过，再打开发现有更新
+const updateReason = ref('')
+
 // Frozen snapshot: what the user currently sees
 const frozenContent = ref('')
 const frozenArticle = ref(null)
 
+// Pending article: when history update detected, store latest for user to accept
+const pendingArticle = ref(null)
+
 const article = computed(() => getArticleBySlug(route.params.slug))
 
-// htmlContent reads from frozen snapshot, not live data
+// htmlContent reads from frozen snapshot
 const htmlContent = computed(() => {
   if (!frozenContent.value) return ''
   return decodeContent(frozenContent.value)
 })
 
-// Track article changes
-let hadArticle = false
+// Route change: freeze new article or detect history update
+watch(() => route.params.slug, (newSlug) => {
+  if (!newSlug) return
 
-// Reset frozen state when navigating to a different article
-watch(() => route.params.slug, () => {
-  hadArticle = false
+  // Reset state
+  showUpdatedDialog.value = false
   frozenContent.value = ''
   frozenArticle.value = null
-  showUpdatedDialog.value = false
-})
+  pendingArticle.value = null
 
-watch(article, (newVal, oldVal) => {
-  // Article deleted
-  if (hadArticle && !newVal && oldVal) {
-    deletedTitle.value = oldVal.title || route.params.slug
-    showDeletedDialog.value = true
-    return
-  }
+  const current = getArticleBySlug(newSlug)
+  if (!current) return
 
-  // First load or navigated to a different article: freeze content
-  if (newVal && (!hadArticle || newVal.slug !== frozenArticle.value?.slug)) {
-    hadArticle = true
-    frozenContent.value = newVal.content
-    frozenArticle.value = { ...newVal }
-    return
-  }
-
-  // Same article, content changed while viewing
-  if (newVal && hadArticle && newVal.content !== frozenContent.value) {
+  // Check if user read this before and content has changed
+  if (hasUpdatedSinceLastRead(newSlug, current.content)) {
+    updateReason.value = 'history'
+    pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
+    // Don't freeze yet — wait for user choice
+  } else {
+    // First time or no changes — display and record
+    frozenContent.value = current.content
+    frozenArticle.value = { ...current }
+    markAsRead(newSlug, current.content)
   }
 }, { immediate: true })
 
-// Also watch the articles array for deep changes (HMR pushes new array)
+// Realtime: watch articles array for HMR/live updates on CURRENT article
 watch(articles, () => {
-  const current = getArticleBySlug(route.params.slug)
-  if (!current && hadArticle) {
-    deletedTitle.value = frozenArticle.value?.title || route.params.slug
+  const slug = route.params.slug
+  if (!slug) return
+  const current = getArticleBySlug(slug)
+
+  // Article deleted
+  if (!current && frozenArticle.value) {
+    deletedTitle.value = frozenArticle.value.title || slug
     showDeletedDialog.value = true
-  } else if (current && hadArticle && current.slug === frozenArticle.value?.slug && current.content !== frozenContent.value) {
+    return
+  }
+
+  if (!current) return
+
+  // If we haven't frozen yet (waiting on history dialog), update pending
+  if (!frozenContent.value && showUpdatedDialog.value) {
+    pendingArticle.value = { ...current }
+    return
+  }
+
+  // Realtime update: same article, content changed while viewing
+  if (frozenContent.value && current.content !== frozenContent.value) {
+    updateReason.value = 'realtime'
+    pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
   }
 })
@@ -75,16 +95,28 @@ const handleConfirmDeleted = () => {
   router.push('/')
 }
 
-// "Yes" - refresh content now
+// "Yes" - show latest content
 const handleRefreshNow = () => {
   showUpdatedDialog.value = false
-  frozenContent.value = article.value?.content || ''
-  frozenArticle.value = article.value ? { ...article.value } : null
+  const latest = pendingArticle.value || article.value
+  if (latest) {
+    frozenContent.value = latest.content
+    frozenArticle.value = { ...latest }
+    markAsRead(latest.slug, latest.content)
+  }
+  pendingArticle.value = null
 }
 
-// "No" - keep current view, will see new content next time
+// "No" - keep old content (or skip if history)
 const handleRefreshLater = () => {
   showUpdatedDialog.value = false
+  // If history dialog and nothing frozen yet, still need to show something
+  if (!frozenContent.value && pendingArticle.value) {
+    frozenContent.value = pendingArticle.value.content
+    frozenArticle.value = { ...pendingArticle.value }
+    // Don't markAsRead — user chose "later", next visit will ask again
+  }
+  pendingArticle.value = null
 }
 
 // Display article: use frozen snapshot
@@ -285,7 +317,9 @@ const adjacent = computed(() => {
             <div>
               <h3 class="text-base font-semibold text-linear-text">文档已更新</h3>
               <p class="text-sm text-linear-text-secondary mt-1">
-                当前文档内容已被修改，是否立即查看最新版本？
+                {{ updateReason === 'history'
+                  ? '该文档自上次阅读后有更新，是否查看最新内容？'
+                  : '当前文档内容已被修改，是否立即查看最新版本？' }}
               </p>
             </div>
           </div>
