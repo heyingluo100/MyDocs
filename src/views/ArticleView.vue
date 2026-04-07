@@ -34,6 +34,9 @@ const htmlContent = computed(() => {
   return decodeContent(frozenContent.value)
 })
 
+// Track whether this is the initial page load (refresh) or SPA navigation
+let isInitialLoad = true
+
 // Route change: freeze new article or detect history update
 watch(() => route.params.slug, (newSlug) => {
   if (!newSlug) return
@@ -47,18 +50,18 @@ watch(() => route.params.slug, (newSlug) => {
   const current = getArticleBySlug(newSlug)
   if (!current) return
 
-  // Check if user read this before and content has changed
-  if (hasUpdatedSinceLastRead(newSlug, current.content)) {
+  // On SPA navigation (not page refresh), check history for updates
+  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, current.content)) {
     updateReason.value = 'history'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
-    // Don't freeze yet — wait for user choice
   } else {
-    // First time or no changes — display and record
+    // Page refresh, first visit, or no changes — show latest directly
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
     markAsRead(newSlug, current.content)
   }
+  isInitialLoad = false
 }, { immediate: true })
 
 // Realtime: watch articles array for HMR/live updates on CURRENT article
@@ -79,6 +82,14 @@ watch(articles, () => {
   // If we haven't frozen yet (waiting on history dialog), update pending
   if (!frozenContent.value && showUpdatedDialog.value) {
     pendingArticle.value = { ...current }
+    return
+  }
+
+  // First load: articles just arrived from fetch — always show latest (this is a page refresh)
+  if (!frozenContent.value && !frozenArticle.value) {
+    frozenContent.value = current.content
+    frozenArticle.value = { ...current }
+    markAsRead(slug, current.content)
     return
   }
 

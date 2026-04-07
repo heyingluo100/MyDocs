@@ -9,7 +9,7 @@
 - **样式**：Tailwind CSS 4.x（`@theme` 颜色系统）
 - **路由**：Vue Router 5（Hash 模式）
 - **Markdown**：markdown-it + gray-matter
-- **Word 转换**：mammoth.js（DOCX → HTML）
+- **Word 转换**：mammoth.js（DOCX → HTML）+ word-extractor（DOC → 文本）
 - **部署**：GitHub Pages / Vercel（纯静态）
 
 ## 快速启动
@@ -47,8 +47,10 @@ npm run dev
 3. 运行 `npm run build`
 
 支持的文件类型：
-- `.docx` — Word 文档，构建时自动转为网页
+- `.docx` — Word 文档，构建时自动转为网页，精确保留空行
+- `.doc` — 旧版 Word 97-2003 文档
 - `.md` — Markdown 文件
+- `.txt` — 纯文本文件，内容直接渲染
 - `.pdf` — 自动复制到公开目录，提供在线预览
 
 运行 `npm run dev` 或 `npm run build` 时会自动扫描并生成索引。

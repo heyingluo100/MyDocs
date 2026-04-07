@@ -70,6 +70,9 @@ export default defineConfig({
         // Our own watcher for content/ directory
         let debounceTimer = null
         const watcher = fs.watch(contentDir, { recursive: true }, (event, filename) => {
+          // Skip Word temp files
+          if (filename && /~\$|\.tmp$/i.test(filename)) return
+
           clearTimeout(debounceTimer)
           debounceTimer = setTimeout(() => {
             console.log(`[build-content] 检测到变化: ${filename}，重新构建...`)
@@ -85,7 +88,7 @@ export default defineConfig({
             } catch (e) {
               console.error('[build-content] 推送失败:', e.message)
             }
-          }, 800)
+          }, 1500)
         })
 
         server.httpServer?.on('close', () => {

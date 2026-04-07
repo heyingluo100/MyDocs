@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
+import WordExtractor from 'word-extractor'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
@@ -20,6 +21,7 @@ const md = new MarkdownIt({
 // Supported file extensions
 const MARKDOWN_EXTS = ['.md', '.markdown']
 const WORD_EXTS = ['.docx']
+const DOC_EXTS = ['.doc']
 const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
@@ -51,17 +53,52 @@ async function processMarkdown(filePath) {
 
 async function processDocx(filePath) {
   const buffer = fs.readFileSync(filePath)
-  const result = await mammoth.convertToHtml({ buffer })
+
+  // Use transformDocument to preserve empty paragraphs
+  const result = await mammoth.convertToHtml({ buffer }, {
+    transformDocument: mammoth.transforms.paragraph(function(para) {
+      const hasText = mammoth.transforms.getDescendantsOfType(para, 'text')
+        .some(t => t.value && t.value.trim() !== '')
+      if (!hasText) {
+        return { ...para, children: [{ type: 'text', value: '\u200B' }] }
+      }
+      return para
+    })
+  })
+
+  // Replace zero-width space paragraphs with visible empty lines
+  const htmlContent = result.value.replace(/<p>\u200B<\/p>/g, '<p><br></p>')
+
   const title = path.basename(filePath, '.docx')
-  // Extract first paragraph as summary (strip HTML tags)
-  const plainText = result.value.replace(/<[^>]+>/g, '')
+  const plainText = htmlContent.replace(/<[^>]+>/g, '')
   const summary = plainText.substring(0, 100).trim()
 
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     date: getFileDate(filePath),
-    content: result.value
+    content: htmlContent
+  }
+}
+
+async function processDoc(filePath) {
+  const extractor = new WordExtractor()
+  const doc = await extractor.extract(filePath)
+  const raw = doc.getBody()
+  const title = path.basename(filePath, '.doc')
+  const summary = raw.substring(0, 100).trim()
+
+  const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const htmlContent = escaped.split(/\r?\n/).map(line => {
+    if (!line.trim()) return '<p><br></p>'
+    return `<p>${line}</p>`
+  }).join('\n')
+
+  return {
+    title,
+    summary: summary.length >= 100 ? summary + '...' : summary,
+    date: getFileDate(filePath),
+    content: htmlContent
   }
 }
 
@@ -71,7 +108,10 @@ function processText(filePath) {
   const summary = raw.substring(0, 100).trim()
   // Convert plain text to HTML: escape HTML entities, preserve line breaks
   const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const htmlContent = escaped.split(/\r?\n/).map(line => `<p>${line || '&nbsp;'}</p>`).join('\n')
+  const htmlContent = escaped.split(/\r?\n/).map(line => {
+    if (!line.trim()) return '<p><br></p>'
+    return `<p>${line}</p>`
+  }).join('\n')
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
@@ -124,6 +164,9 @@ async function buildArticles() {
       // Skip directories inside tag folders
       if (fs.statSync(filePath).isDirectory()) continue
 
+      // Skip Word temporary files (~$*.docx)
+      if (file.startsWith('~$')) continue
+
       // Process Markdown files
       if (MARKDOWN_EXTS.includes(ext)) {
         try {
@@ -143,10 +186,29 @@ async function buildArticles() {
         }
       }
 
-      // Process Word files
+      // Process Word .docx files
       else if (WORD_EXTS.includes(ext)) {
         try {
           const result = await processDocx(filePath)
+          const slug = slugify(tag + '-' + baseName) || baseName
+          articles.push({
+            slug,
+            title: result.title,
+            tags: [tag],
+            date: result.date,
+            summary: result.summary,
+            files: [],
+            content: Buffer.from(result.content).toString('base64')
+          })
+        } catch (err) {
+          console.error(`[build-content] 处理 ${file} 失败:`, err.message)
+        }
+      }
+
+      // Process Word .doc files (legacy format)
+      else if (DOC_EXTS.includes(ext)) {
+        try {
+          const result = await processDoc(filePath)
           const slug = slugify(tag + '-' + baseName) || baseName
           articles.push({
             slug,
