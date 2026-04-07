@@ -58,7 +58,8 @@ const totalCount = computed(() => filteredArticles.value.length)
 </script>
 
 <template>
-  <div class="flex flex-col lg:flex-row gap-8">
+  <div>
+    <div class="flex flex-col lg:flex-row gap-8">
     <!-- Desktop sidebar (popover trigger) -->
     <div class="hidden lg:block shrink-0">
       <TagPopover :active-tag="currentTag" />
@@ -101,4 +102,5 @@ const totalCount = computed(() => filteredArticles.value.length)
 
   <!-- Mobile bottom sheet -->
   <TagBottomSheet v-model:open="showMobileSheet" :active-tag="currentTag" />
+  </div>
 </template>

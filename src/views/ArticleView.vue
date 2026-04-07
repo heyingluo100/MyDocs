@@ -207,6 +207,7 @@ const adjacent = computed(() => {
 </script>
 
 <template>
+  <div>
   <!-- Reading progress bar -->
   <div
     v-if="displayArticle"
@@ -509,6 +510,7 @@ const adjacent = computed(() => {
       </div>
     </Transition>
   </Teleport>
+  </div>
 </template>
 
 <style scoped>

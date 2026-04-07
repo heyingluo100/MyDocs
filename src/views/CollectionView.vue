@@ -45,13 +45,16 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
         </div>
       </header>
 
-      <!-- Article grid (same as homepage) -->
+      <!-- Article grid with spread animation -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ArticleCard
-          v-for="article in collectionArticles"
+        <div
+          v-for="(article, i) in collectionArticles"
           :key="article.slug"
-          :article="article"
-        />
+          class="card-spread"
+          :style="{ animationDelay: `${i * 80}ms` }"
+        >
+          <ArticleCard :article="article" />
+        </div>
       </div>
     </div>
 
@@ -61,3 +64,19 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
     </div>
   </div>
 </template>
+
+<style scoped>
+.card-spread {
+  animation: spread 0.4s ease both;
+}
+@keyframes spread {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+</style>
