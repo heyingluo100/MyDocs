@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
+import ArticleCard from '../components/ArticleCard.vue'
 
 const route = useRoute()
 const { getArticlesByCollection, getCollectionBySlug } = useArticles()
@@ -12,7 +13,7 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto">
+  <div class="max-w-5xl mx-auto">
     <!-- Back button -->
     <router-link
       to="/"
@@ -44,26 +45,14 @@ const collectionArticles = computed(() => getArticlesByCollection(collectionSlug
         </div>
       </header>
 
-      <!-- Article list -->
-      <nav class="space-y-2">
-        <router-link
-          v-for="(article, i) in collectionArticles"
+      <!-- Article grid (same as homepage) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ArticleCard
+          v-for="article in collectionArticles"
           :key="article.slug"
-          :to="`/article/${article.slug}`"
-          class="flex items-center gap-4 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-all duration-300 group"
-        >
-          <span class="text-sm text-linear-text-secondary/50 w-6 text-center shrink-0 tabular-nums">{{ i + 1 }}</span>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-linear-text group-hover:text-linear-accent transition-colors truncate">
-              {{ article.title }}
-            </p>
-            <p v-if="article.summary" class="text-xs text-linear-text-secondary/60 truncate mt-0.5">
-              {{ article.summary }}
-            </p>
-          </div>
-          <span class="text-xs text-linear-text-secondary/50 shrink-0">{{ article.createdAt }}</span>
-        </router-link>
-      </nav>
+          :article="article"
+        />
+      </div>
     </div>
 
     <div v-else class="text-center py-20">
