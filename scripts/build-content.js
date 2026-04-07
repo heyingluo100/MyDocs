@@ -5,6 +5,7 @@ import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
 import WordExtractor from 'word-extractor'
+import JSZip from 'jszip'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
@@ -25,9 +26,32 @@ const DOC_EXTS = ['.doc']
 const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
-function getFileDate(filePath) {
+function getFileDates(filePath) {
   const stat = fs.statSync(filePath)
-  return stat.mtime.toISOString().split('T')[0]
+  return {
+    createdAt: stat.birthtime.toISOString().split('T')[0],
+    updatedAt: stat.mtime.toISOString().split('T')[0]
+  }
+}
+
+async function getDocxDates(filePath) {
+  try {
+    const buffer = fs.readFileSync(filePath)
+    const zip = await JSZip.loadAsync(buffer)
+    const coreXml = await zip.file('docProps/core.xml')?.async('text')
+    if (!coreXml) return getFileDates(filePath)
+
+    const createdMatch = coreXml.match(/<dcterms:created[^>]*>([^<]+)</)
+    const modifiedMatch = coreXml.match(/<dcterms:modified[^>]*>([^<]+)</)
+
+    const fsDates = getFileDates(filePath)
+    return {
+      createdAt: createdMatch ? createdMatch[1].split('T')[0] : fsDates.createdAt,
+      updatedAt: modifiedMatch ? modifiedMatch[1].split('T')[0] : fsDates.updatedAt
+    }
+  } catch {
+    return getFileDates(filePath)
+  }
 }
 
 function slugify(str) {
@@ -46,7 +70,7 @@ async function processMarkdown(filePath) {
   return {
     title: frontmatter.title || path.basename(filePath, path.extname(filePath)),
     summary: frontmatter.summary || '',
-    date: getFileDate(filePath),
+    ...getFileDates(filePath),
     content: htmlContent
   }
 }
@@ -72,11 +96,12 @@ async function processDocx(filePath) {
   const title = path.basename(filePath, '.docx')
   const plainText = htmlContent.replace(/<[^>]+>/g, '')
   const summary = plainText.substring(0, 100).trim()
+  const dates = await getDocxDates(filePath)
 
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    date: getFileDate(filePath),
+    ...dates,
     content: htmlContent
   }
 }
@@ -97,7 +122,7 @@ async function processDoc(filePath) {
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    date: getFileDate(filePath),
+    ...getFileDates(filePath),
     content: htmlContent
   }
 }
@@ -115,7 +140,7 @@ function processText(filePath) {
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    date: getFileDate(filePath),
+    ...getFileDates(filePath),
     content: htmlContent
   }
 }
@@ -176,7 +201,8 @@ async function buildArticles() {
             slug,
             title: result.title,
             tags: [tag],
-            date: result.date,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt,
             summary: result.summary,
             files: [],
             content: Buffer.from(result.content).toString('base64')
@@ -195,7 +221,8 @@ async function buildArticles() {
             slug,
             title: result.title,
             tags: [tag],
-            date: result.date,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt,
             summary: result.summary,
             files: [],
             content: Buffer.from(result.content).toString('base64')
@@ -214,7 +241,8 @@ async function buildArticles() {
             slug,
             title: result.title,
             tags: [tag],
-            date: result.date,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt,
             summary: result.summary,
             files: [],
             content: Buffer.from(result.content).toString('base64')
@@ -233,7 +261,8 @@ async function buildArticles() {
             slug,
             title: result.title,
             tags: [tag],
-            date: result.date,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt,
             summary: result.summary,
             files: [],
             content: Buffer.from(result.content).toString('base64')
@@ -254,7 +283,7 @@ async function buildArticles() {
           slug,
           title: baseName,
           tags: [tag],
-          date: getFileDate(filePath),
+          ...getFileDates(filePath),
           summary: `${ext.replace('.', '').toUpperCase()} 文件`,
           files: [file],
           content: Buffer.from(`<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`).toString('base64')
@@ -263,8 +292,8 @@ async function buildArticles() {
     }
   }
 
-  // Sort by title (Chinese pinyin order)
-  articles.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'))
+  // Sort by creation date (newest first)
+  articles.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   // Collect all tag names (including empty folders)
   const allTags = tagFolders.map(f => f.name)

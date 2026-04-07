@@ -261,8 +261,11 @@ const adjacent = computed(() => {
     <header ref="headerRef" v-if="displayArticle" class="mb-8">
       <h1 class="text-2xl font-bold text-linear-text mb-3">{{ displayArticle.title }}</h1>
       <div class="flex items-center gap-3 flex-wrap">
-        <span v-if="displayArticle.date" class="text-sm text-linear-text-secondary">
-          {{ displayArticle.date }}
+        <span v-if="displayArticle.createdAt" class="text-sm text-linear-text-secondary">
+          创建于 {{ displayArticle.createdAt }}
+        </span>
+        <span v-if="displayArticle.updatedAt && displayArticle.updatedAt !== displayArticle.createdAt" class="text-sm text-linear-text-secondary">
+          · 更新于 {{ displayArticle.updatedAt }}
         </span>
         <span
           v-for="tag in displayArticle.tags"
