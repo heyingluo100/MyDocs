@@ -249,13 +249,21 @@ const adjacent = computed(() => {
     <router-link to="/" class="text-linear-accent text-sm mt-2 inline-block">返回首页</router-link>
   </div>
 
-  <!-- TOC dialog -->
+  <!-- TOC bottom sheet -->
   <Teleport to="body">
+    <!-- Backdrop -->
     <Transition name="fade">
-      <div v-if="showTocDialog" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showTocDialog = false"></div>
-        <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl w-full">
-          <div class="flex items-center justify-between mb-4">
+      <div v-if="showTocDialog" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" @click="showTocDialog = false"></div>
+    </Transition>
+    <!-- Panel -->
+    <Transition name="slide-up">
+      <div v-if="showTocDialog" class="fixed inset-x-0 bottom-0 z-50">
+        <div class="bg-linear-bg rounded-t-2xl border-t border-linear-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] pb-6">
+          <!-- Drag indicator -->
+          <div class="flex justify-center pt-3 pb-2">
+            <div class="w-10 h-1 rounded-full bg-linear-text-secondary/30"></div>
+          </div>
+          <div class="flex items-center justify-between px-6 mb-3">
             <h3 class="text-base font-semibold text-linear-text">
               {{ displayArticle?.tags?.[0] || '目录' }}
             </h3>
@@ -265,7 +273,7 @@ const adjacent = computed(() => {
               </svg>
             </button>
           </div>
-          <nav class="space-y-1 max-h-80 overflow-y-auto">
+          <nav class="space-y-1 max-h-[60vh] overflow-y-auto px-4">
             <router-link
               v-for="(item, i) in adjacent.siblings"
               :key="item.slug"
@@ -362,5 +370,13 @@ const adjacent = computed(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.3s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
 }
 </style>
