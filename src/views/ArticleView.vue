@@ -6,11 +6,12 @@ import ArticleContent from '../components/ArticleContent.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { getArticleBySlug, decodeContent, articles } = useArticles()
+const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
 
 // Dialog states
 const showDeletedDialog = ref(false)
 const showUpdatedDialog = ref(false)
+const showTocDialog = ref(false)
 const deletedTitle = ref('')
 
 // Frozen snapshot: what the user currently sees
@@ -79,6 +80,12 @@ const handleRefreshLater = () => {
 
 // Display article: use frozen snapshot
 const displayArticle = computed(() => frozenArticle.value)
+
+// Adjacent articles for navigation
+const adjacent = computed(() => {
+  if (!displayArticle.value) return { prev: null, next: null, siblings: [] }
+  return getAdjacentArticles(displayArticle.value.slug)
+})
 </script>
 
 <template>
@@ -134,6 +141,55 @@ const displayArticle = computed(() => frozenArticle.value)
         </router-link>
       </div>
     </div>
+
+    <!-- Article navigation: prev / toc / next -->
+    <nav v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
+      <div class="flex items-center justify-between gap-4">
+        <!-- Prev -->
+        <router-link
+          v-if="adjacent.prev"
+          :to="`/article/${adjacent.prev.slug}`"
+          class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group"
+        >
+          <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+          </svg>
+          <div class="min-w-0">
+            <p class="text-xs text-linear-text-secondary">上一篇</p>
+            <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors">{{ adjacent.prev.title }}</p>
+          </div>
+        </router-link>
+        <div v-else class="flex-1"></div>
+
+        <!-- TOC button -->
+        <button
+          v-if="adjacent.siblings.length > 1"
+          @click="showTocDialog = true"
+          class="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors text-linear-text-secondary hover:text-linear-accent"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+          <span class="text-xs">目录</span>
+        </button>
+
+        <!-- Next -->
+        <router-link
+          v-if="adjacent.next"
+          :to="`/article/${adjacent.next.slug}`"
+          class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group justify-end text-right"
+        >
+          <div class="min-w-0">
+            <p class="text-xs text-linear-text-secondary">下一篇</p>
+            <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors">{{ adjacent.next.title }}</p>
+          </div>
+          <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+          </svg>
+        </router-link>
+        <div v-else class="flex-1"></div>
+      </div>
+    </nav>
   </div>
 
   <div v-else-if="!showDeletedDialog" class="text-center py-20">
@@ -141,8 +197,44 @@ const displayArticle = computed(() => frozenArticle.value)
     <router-link to="/" class="text-linear-accent text-sm mt-2 inline-block">返回首页</router-link>
   </div>
 
-  <!-- Deleted dialog -->
+  <!-- TOC dialog -->
   <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="showTocDialog" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showTocDialog = false"></div>
+        <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl w-full">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-semibold text-linear-text">
+              {{ displayArticle?.tags?.[0] || '目录' }}
+            </h3>
+            <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
+              <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <nav class="space-y-1 max-h-80 overflow-y-auto">
+            <router-link
+              v-for="(item, i) in adjacent.siblings"
+              :key="item.slug"
+              :to="`/article/${item.slug}`"
+              @click="showTocDialog = false"
+              :class="[
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-300',
+                item.slug === displayArticle?.slug
+                  ? 'bg-linear-accent/10 text-linear-accent font-medium'
+                  : 'text-linear-text-secondary hover:bg-linear-bg-tertiary hover:text-linear-text'
+              ]"
+            >
+              <span class="text-xs text-linear-text-secondary/50 w-5 text-center shrink-0">{{ i + 1 }}</span>
+              <span class="truncate">{{ item.title }}</span>
+            </router-link>
+          </nav>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Deleted dialog -->
     <Transition name="fade">
       <div v-if="showDeletedDialog" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>

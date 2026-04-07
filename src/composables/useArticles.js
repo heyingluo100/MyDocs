@@ -57,12 +57,26 @@ export function useArticles() {
     }
   }
 
+  const getAdjacentArticles = (slug) => {
+    const article = articles.value.find(a => a.slug === slug)
+    if (!article || !article.tags.length) return { prev: null, next: null, siblings: [] }
+    const tag = article.tags[0]
+    const siblings = articles.value.filter(a => a.tags.includes(tag))
+    const index = siblings.findIndex(a => a.slug === slug)
+    return {
+      prev: index > 0 ? siblings[index - 1] : null,
+      next: index < siblings.length - 1 ? siblings[index + 1] : null,
+      siblings
+    }
+  }
+
   return {
     articles,
     allTags,
     loaded,
     getArticlesByTag,
     getArticleBySlug,
+    getAdjacentArticles,
     decodeContent
   }
 }
