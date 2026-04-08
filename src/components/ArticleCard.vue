@@ -61,6 +61,9 @@ const handleCollectionClick = (e, collectionSlug) => {
         <span v-if="article.updatedAt && article.updatedAt !== article.createdAt" class="text-xs text-linear-text-secondary/40">
           · 更新于 {{ article.updatedAt }}
         </span>
+        <span v-if="article.wordCount" class="text-xs text-linear-text-secondary/40">
+          · {{ article.wordCount >= 10000 ? (article.wordCount / 10000).toFixed(1) + '万' : article.wordCount }} 字
+        </span>
       </div>
       <div v-if="article.files && article.files.length" class="flex items-center gap-1 text-xs text-linear-text-secondary/60">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

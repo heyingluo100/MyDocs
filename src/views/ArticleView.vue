@@ -287,6 +287,9 @@ const adjacent = computed(() => {
         <span v-if="displayArticle.updatedAt && displayArticle.updatedAt !== displayArticle.createdAt" class="text-sm text-linear-text-secondary">
           · 更新于 {{ displayArticle.updatedAt }}
         </span>
+        <span v-if="displayArticle.wordCount" class="text-sm text-linear-text-secondary">
+          · {{ displayArticle.wordCount >= 10000 ? (displayArticle.wordCount / 10000).toFixed(1) + '万' : displayArticle.wordCount }} 字
+        </span>
         <span
           v-for="tag in displayArticle.tags"
           :key="tag"

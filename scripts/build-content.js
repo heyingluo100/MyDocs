@@ -58,6 +58,11 @@ function trimTrailingEmpty(html) {
   return html.replace(/(\s*<p>(\s|<br\s*\/?>|&nbsp;)*<\/p>)*\s*$/gi, '')
 }
 
+function countWords(html) {
+  const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, '')
+  return text.length
+}
+
 function slugify(str) {
   return str
     .toLowerCase()
@@ -195,6 +200,7 @@ async function buildArticles() {
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
+          wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
         }
       } catch (err) {
@@ -208,6 +214,7 @@ async function buildArticles() {
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
+          wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
         }
       } catch (err) {
@@ -221,6 +228,7 @@ async function buildArticles() {
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
+          wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
         }
       } catch (err) {
@@ -234,6 +242,7 @@ async function buildArticles() {
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
+          wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
         }
       } catch (err) {
@@ -242,13 +251,15 @@ async function buildArticles() {
     } else if (OTHER_FILE_EXTS.includes(ext)) {
       fs.copyFileSync(filePath, path.join(publicFiles, file))
       filesCopied++
+      const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
       return {
         slug, title: baseName, tags: [...tags],
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
         files: [file],
-        content: Buffer.from(`<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`).toString('base64')
+        wordCount: countWords(otherContent),
+        content: Buffer.from(otherContent).toString('base64')
       }
     }
     return null
