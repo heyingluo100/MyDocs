@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadHistory } from '../composables/useReadHistory.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
+import { useReadingPrefs } from '../composables/useReadingPrefs.js'
 import ArticleContent from '../components/ArticleContent.vue'
 
 // Reading progress + sticky bar + position saving
@@ -50,6 +51,30 @@ const showTocDialog = ref(false)
 const showContinueDialog = ref(false)
 const savedProgress = ref(0)
 const deletedTitle = ref('')
+
+// Mobile reading overlay menu
+const { FONT_SIZES, currentSize } = useReadingPrefs()
+const showReadingMenu = ref(false)
+const contentAreaRef = ref(null)
+
+const handleContentTap = (e) => {
+  // Only on mobile (<1024px)
+  if (window.innerWidth >= 1024) return
+  // Ignore taps on links, buttons, or interactive elements
+  if (e.target.closest('a, button, [role="button"]')) return
+  const rect = contentAreaRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const y = e.clientY - rect.top
+  const third = rect.height / 3
+  // Only trigger on center 1/3
+  if (y > third && y < third * 2) {
+    showReadingMenu.value = !showReadingMenu.value
+  }
+}
+
+watch(showReadingMenu, (val) => {
+  document.body.style.overflow = val ? 'hidden' : ''
+})
 
 // TOC 弹出层打开时锁定背景滚动
 watch(showTocDialog, (val) => {
@@ -264,7 +289,7 @@ const adjacent = computed(() => {
   </Transition>
 
   <!-- Show snapshot content if user chose "later", otherwise show live content -->
-  <div v-if="displayArticle" class="max-w-3xl mx-auto">
+  <div v-if="displayArticle" ref="contentAreaRef" class="max-w-3xl mx-auto" @click="handleContentTap">
     <!-- Back button -->
     <a
       href="#"
@@ -386,6 +411,84 @@ const adjacent = computed(() => {
     <p class="text-linear-text-secondary">文章不存在</p>
     <router-link to="/" class="text-linear-accent text-sm mt-2 inline-block">返回首页</router-link>
   </div>
+
+  <!-- Mobile reading overlay menu -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="showReadingMenu" class="fixed inset-0 z-50 lg:hidden" @click.self="showReadingMenu = false">
+        <!-- Top bar: font size -->
+        <div class="reading-menu-top absolute top-0 inset-x-0 bg-linear-bg/95 backdrop-blur-md border-b border-linear-border/30 safe-area-top">
+          <div class="flex items-center justify-center gap-2 px-6 py-4">
+            <button
+              v-for="size in FONT_SIZES"
+              :key="size.key"
+              @click="currentSize = size.key"
+              class="flex items-center justify-center min-w-[3rem] px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200"
+              :class="currentSize === size.key
+                ? 'bg-linear-accent text-white'
+                : 'bg-linear-bg-secondary text-linear-text-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary'"
+            >
+              {{ size.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom bar: navigation -->
+        <div class="reading-menu-bottom absolute bottom-0 inset-x-0 bg-linear-bg/95 backdrop-blur-md border-t border-linear-border/30 safe-area-bottom">
+          <div class="px-6 pt-3 pb-2">
+            <!-- Nav row -->
+            <div class="flex items-center justify-around mb-2">
+              <button
+                @click="showReadingMenu = false; adjacent.prev && router.replace(`/article/${adjacent.prev.slug}`)"
+                :disabled="!adjacent.prev"
+                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                :class="adjacent.prev ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+                </svg>
+                <span class="text-xs">上一章</span>
+              </button>
+
+              <button
+                @click="showReadingMenu = false; showTocDialog = true"
+                :disabled="adjacent.siblings.length <= 1"
+                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                :class="adjacent.siblings.length > 1 ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                <span class="text-xs">目录</span>
+              </button>
+
+              <button
+                @click="showReadingMenu = false; adjacent.next && router.replace(`/article/${adjacent.next.slug}`)"
+                :disabled="!adjacent.next"
+                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                :class="adjacent.next ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+                </svg>
+                <span class="text-xs">下一章</span>
+              </button>
+
+              <button
+                @click="showReadingMenu = false; goBack()"
+                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl text-linear-text-secondary active:bg-linear-bg-tertiary transition-colors"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span class="text-xs">退出</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <!-- TOC bottom sheet -->
   <Teleport to="body">
@@ -563,4 +666,26 @@ const adjacent = computed(() => {
 .sticky-bar-leave-to {
   transform: translateY(-100%);
 }
+
+/* Reading menu bars slide in */
+.fade-enter-active .reading-menu-top,
+.fade-enter-active .reading-menu-bottom {
+  transition: transform 0.3s ease;
+}
+.fade-leave-active .reading-menu-top,
+.fade-leave-active .reading-menu-bottom {
+  transition: transform 0.2s ease;
+}
+.fade-enter-from .reading-menu-top,
+.fade-leave-to .reading-menu-top {
+  transform: translateY(-100%);
+}
+.fade-enter-from .reading-menu-bottom,
+.fade-leave-to .reading-menu-bottom {
+  transform: translateY(100%);
+}
+
+/* Safe area padding for notched devices */
+.safe-area-top { padding-top: env(safe-area-inset-top); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
 </style>
