@@ -1,5 +1,6 @@
 <script setup>
 import { RouterView } from 'vue-router'
+import { useRouter } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
 import WatermarkLayer from './components/WatermarkLayer.vue'
 import { useTheme } from './composables/useTheme.js'
@@ -7,6 +8,32 @@ import { useProtection } from './composables/useProtection.js'
 
 useTheme()
 useProtection()
+
+const router = useRouter()
+
+// 保存滚动位置：离开页面前记录
+const scrollPositions = new Map()
+
+router.beforeEach((to, from) => {
+  scrollPositions.set(from.fullPath, window.scrollY)
+})
+
+// popstate（浏览器后退/前进）标记
+let isPop = false
+window.addEventListener('popstate', () => {
+  isPop = true
+})
+
+// Transition @enter：新 DOM 已挂载但还在 opacity:0，此时滚动无感知
+const handleEnter = () => {
+  if (isPop) {
+    const saved = scrollPositions.get(router.currentRoute.value.fullPath)
+    window.scrollTo(0, saved ?? 0)
+  } else {
+    window.scrollTo(0, 0)
+  }
+  isPop = false
+}
 </script>
 
 <template>
@@ -14,7 +41,7 @@ useProtection()
     <AppHeader />
     <main class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-6 py-8">
       <RouterView v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
+        <Transition name="page" mode="out-in" @enter="handleEnter">
           <component :is="Component" />
         </Transition>
       </RouterView>

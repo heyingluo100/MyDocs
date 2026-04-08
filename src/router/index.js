@@ -31,8 +31,9 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+  // 滚动恢复由 App.vue 的 Transition @enter 钩子处理
   scrollBehavior() {
-    return { top: 0 }
+    return false
   }
 })
 
