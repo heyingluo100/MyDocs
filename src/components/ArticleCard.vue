@@ -17,7 +17,7 @@ const handleCollectionClick = (e, collectionSlug) => {
 <template>
   <router-link
     :to="`/article/${article.slug}`"
-    class="block bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-all duration-300 group"
+    class="block bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300 group"
   >
     <div class="flex items-center gap-2 mb-2 flex-wrap">
       <span

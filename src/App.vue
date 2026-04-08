@@ -35,6 +35,9 @@ useProtection()
 .page-leave-active {
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
+.page-enter-active {
+  pointer-events: none;
+}
 .page-enter-from {
   opacity: 0;
   transform: translateY(8px);

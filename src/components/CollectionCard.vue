@@ -17,7 +17,7 @@ const latestTitle = props.articles.length ? props.articles[props.articles.length
     <div class="absolute inset-0 bg-linear-bg-tertiary/40 rounded-2xl border border-linear-border/20 translate-x-3 translate-y-3"></div>
 
     <!-- Main card -->
-    <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-all duration-300">
+    <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <span
           v-for="t in (collection.tags || [collection.tag])"
