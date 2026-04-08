@@ -328,6 +328,7 @@ const adjacent = computed(() => {
         <router-link
           v-if="adjacent.prev"
           :to="`/article/${adjacent.prev.slug}`"
+          replace
           class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group"
         >
           <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,6 +357,7 @@ const adjacent = computed(() => {
         <router-link
           v-if="adjacent.next"
           :to="`/article/${adjacent.next.slug}`"
+          replace
           class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group justify-end text-right"
         >
           <div class="min-w-0">
@@ -405,6 +407,7 @@ const adjacent = computed(() => {
               v-for="(item, i) in adjacent.siblings"
               :key="item.slug"
               :to="`/article/${item.slug}`"
+              replace
               @click="showTocDialog = false"
               :class="[
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-300',
