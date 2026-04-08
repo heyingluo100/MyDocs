@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import TagBottomSheet from '../components/TagBottomSheet.vue'
@@ -7,9 +7,8 @@ import ArticleCard from '../components/ArticleCard.vue'
 import CollectionCard from '../components/CollectionCard.vue'
 
 const route = useRoute()
-const { getArticlesByTag, allCollections } = useArticles()
+const { getArticlesByTag, allCollections, sortBy } = useArticles()
 const showMobileSheet = ref(false)
-const sortBy = ref('created')
 const showSortMenu = ref(false)
 
 const sortLabel = computed(() => sortBy.value === 'updated' ? '最近更新' : '最新创建')
@@ -22,6 +21,11 @@ const handleSort = (value) => {
 const currentTag = computed(() => {
   return route.params.tag ? decodeURIComponent(route.params.tag) : ''
 })
+
+// Save current tag context for article navigation
+watch(currentTag, (tag) => {
+  sessionStorage.setItem('nav-context-tag', tag)
+}, { immediate: true })
 
 const filteredArticles = computed(() => {
   return getArticlesByTag(currentTag.value)

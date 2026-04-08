@@ -5,6 +5,7 @@ const articles = ref([])
 const tagNames = ref([])
 const collectionList = ref([])
 const loaded = ref(false)
+const sortBy = ref('created')
 
 function updateData(newData) {
   articles.value = newData.articles || []
@@ -69,7 +70,7 @@ export function useArticles() {
     }
   }
 
-  const getAdjacentArticles = (slug) => {
+  const getAdjacentArticles = (slug, contextTag) => {
     const article = articles.value.find(a => a.slug === slug)
     if (!article) return { prev: null, next: null, siblings: [] }
 
@@ -85,8 +86,9 @@ export function useArticles() {
     }
 
     // Otherwise navigate within the same tag (standalone articles only)
-    if (!article.tags.length) return { prev: null, next: null, siblings: [] }
-    const tag = article.tags[0]
+    // Use contextTag if provided, otherwise fall back to article's first tag
+    const tag = contextTag && article.tags.includes(contextTag) ? contextTag : article.tags[0]
+    if (!tag) return { prev: null, next: null, siblings: [] }
     const siblings = articles.value.filter(a => a.tags.includes(tag) && !a.collectionSlug)
     const index = siblings.findIndex(a => a.slug === slug)
     return {
@@ -101,6 +103,7 @@ export function useArticles() {
     allTags,
     allCollections,
     loaded,
+    sortBy,
     getArticlesByTag,
     getArticleBySlug,
     getArticlesByCollection,

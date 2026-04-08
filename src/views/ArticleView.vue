@@ -42,7 +42,7 @@ onBeforeUnmount(() => {
 
 const route = useRoute()
 const router = useRouter()
-const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
+const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
 const { checkArticleAccess } = useInvitation()
@@ -113,6 +113,10 @@ const htmlContent = computed(() => {
 
 // Track whether this is the initial page load (refresh) or SPA navigation
 let isInitialLoad = true
+
+// Track which tag context the user came from (for correct siblings navigation)
+// Uses sessionStorage so it persists across page navigations
+const navContextTag = ref(sessionStorage.getItem('nav-context-tag') || '')
 
 // Route change: freeze new article or detect history update
 watch(() => route.params.slug, (newSlug, oldSlug) => {
@@ -314,10 +318,22 @@ const handleNavCancel = () => {
 // Display article: use frozen snapshot
 const displayArticle = computed(() => frozenArticle.value)
 
-// Adjacent articles for navigation
+// Adjacent articles for navigation (sorted to match homepage)
 const adjacent = computed(() => {
   if (!displayArticle.value) return { prev: null, next: null, siblings: [] }
-  return getAdjacentArticles(displayArticle.value.slug)
+  const result = getAdjacentArticles(displayArticle.value.slug, navContextTag.value)
+  // Sort siblings to match homepage sort order
+  const sorted = [...result.siblings].sort((a, b) => {
+    const dateA = sortBy.value === 'updated' ? (a.updatedAt || a.createdAt) : a.createdAt
+    const dateB = sortBy.value === 'updated' ? (b.updatedAt || b.createdAt) : b.createdAt
+    return dateB.localeCompare(dateA)
+  })
+  const index = sorted.findIndex(a => a.slug === displayArticle.value.slug)
+  return {
+    prev: index > 0 ? sorted[index - 1] : null,
+    next: index < sorted.length - 1 ? sorted[index + 1] : null,
+    siblings: sorted
+  }
 })
 </script>
 
@@ -598,13 +614,24 @@ const adjacent = computed(() => {
           </div>
           <div class="flex items-center justify-between px-6 mb-3">
             <h3 class="text-base font-semibold text-linear-text">
-              {{ displayArticle?.tags?.[0] || '目录' }}
+              {{ displayArticle?.collection || displayArticle?.tags?.[0] || '目录' }}
             </h3>
-            <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
-              <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                @click="sortBy = sortBy === 'created' ? 'updated' : 'created'"
+                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
+                </svg>
+                {{ sortBy === 'updated' ? '最近更新' : '最新创建' }}
+              </button>
+              <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
+                <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
           <nav class="space-y-1 max-h-[60vh] overflow-y-auto px-4">
             <a
@@ -621,9 +648,9 @@ const adjacent = computed(() => {
             >
               <span class="text-xs text-linear-text-secondary/50 w-5 text-center shrink-0">{{ i + 1 }}</span>
               <span class="truncate flex-1">{{ item.title }}</span>
-              <svg v-if="item.locked" class="w-3.5 h-3.5 text-linear-text-secondary/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-              </svg>
+              <span v-if="item.locked" class="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 leading-tight">
+                已锁
+              </span>
             </a>
           </nav>
         </div>
