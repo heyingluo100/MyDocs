@@ -30,6 +30,14 @@
   }
 }
 
+/* 全局主题过渡 — 让颜色切换平滑 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, fill 0.4s ease, stroke 0.4s ease !important;
+}
+
 [data-theme="dark"] {
   --color-linear-bg: #0D0D0D;
   --color-linear-bg-secondary: #1A1A1A;

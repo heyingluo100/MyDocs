@@ -22,7 +22,13 @@ export function useTheme() {
   })
 
   const toggleTheme = () => {
+    // 添加过渡 class，让全局颜色平滑切换
+    document.documentElement.classList.add('theme-transition')
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
+    // 过渡结束后移除，避免影响其他交互性能
+    setTimeout(() => {
+      document.documentElement.classList.remove('theme-transition')
+    }, 450)
   }
 
   return { theme, toggleTheme }
