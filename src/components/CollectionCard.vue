@@ -1,10 +1,16 @@
 <script setup>
+import { computed } from 'vue'
+import { useReadStatus } from '../composables/useReadStatus.js'
+
 const props = defineProps({
   collection: { type: Object, required: true },
   articles: { type: Array, required: true }
 })
 
+const { getCollectionDotType } = useReadStatus()
+
 const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
+const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
 </script>
 
 <template>
@@ -18,6 +24,11 @@ const latestTitle = props.articles.length ? props.articles[props.articles.length
 
     <!-- Main card -->
     <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
+      <!-- Status dot -->
+      <span
+        v-if="dotType"
+        class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-linear-bg-secondary bg-amber-500"
+      ></span>
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <span
           v-for="t in (collection.tags || [collection.tag])"

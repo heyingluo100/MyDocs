@@ -10,6 +10,15 @@ import CollectionCard from '../components/CollectionCard.vue'
 const route = useRoute()
 const { getArticlesByTag, allCollections } = useArticles()
 const showMobileSheet = ref(false)
+const sortBy = ref('created')
+const showSortMenu = ref(false)
+
+const sortLabel = computed(() => sortBy.value === 'updated' ? '最近更新' : '最新创建')
+
+const handleSort = (value) => {
+  sortBy.value = value
+  showSortMenu.value = false
+}
 
 const currentTag = computed(() => {
   return route.params.tag ? decodeURIComponent(route.params.tag) : ''
@@ -38,17 +47,21 @@ const mixedItems = computed(() => {
     const colArticles = articles.filter(a => a.collectionSlug === col.slug)
     if (colArticles.length === 0) continue
     seenCollections.add(col.slug)
-    // Use the newest article's createdAt as the collection's sort date
-    const sortDate = colArticles.reduce((max, a) => a.createdAt > max ? a.createdAt : max, colArticles[0].createdAt)
+    const sortDate = sortBy.value === 'updated'
+      ? colArticles.reduce((max, a) => (a.updatedAt || a.createdAt) > max ? (a.updatedAt || a.createdAt) : max, colArticles[0].updatedAt || colArticles[0].createdAt)
+      : colArticles.reduce((max, a) => a.createdAt > max ? a.createdAt : max, colArticles[0].createdAt)
     items.push({ type: 'collection', collection: col, articles: colArticles, sortDate })
   }
 
   // Add standalone articles
   for (const article of standaloneArticles) {
-    items.push({ type: 'article', article, sortDate: article.createdAt })
+    const sortDate = sortBy.value === 'updated'
+      ? (article.updatedAt || article.createdAt)
+      : article.createdAt
+    items.push({ type: 'article', article, sortDate })
   }
 
-  // Sort by creation date (newest first)
+  // Sort by selected order (newest first)
   items.sort((a, b) => b.sortDate.localeCompare(a.sortDate))
 
   return items
@@ -75,16 +88,60 @@ const totalCount = computed(() => filteredArticles.value.length)
           {{ totalCount }} 篇
         </span>
 
-        <!-- Mobile filter button -->
-        <button
-          class="lg:hidden ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
-          @click="showMobileSheet = true"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-          </svg>
-          分类
-        </button>
+        <div class="ml-auto flex items-center gap-2">
+          <!-- Sort dropdown -->
+          <div class="relative">
+            <button
+              class="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
+              @click="showSortMenu = !showSortMenu"
+            >
+              {{ sortLabel }}
+              <svg class="w-3.5 h-3.5 transition-transform duration-300" :class="showSortMenu ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <Transition name="sort-menu">
+              <div
+                v-if="showSortMenu"
+                class="absolute right-0 top-full mt-1.5 bg-linear-bg rounded-xl border border-linear-border/50 shadow-lg overflow-hidden z-30 min-w-[8rem]"
+              >
+                <button
+                  class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary"
+                  :class="sortBy === 'created' ? 'text-linear-accent' : 'text-linear-text'"
+                  @click="handleSort('created')"
+                >
+                  最新创建
+                  <svg v-if="sortBy === 'created'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary"
+                  :class="sortBy === 'updated' ? 'text-linear-accent' : 'text-linear-text'"
+                  @click="handleSort('updated')"
+                >
+                  最近更新
+                  <svg v-if="sortBy === 'updated'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
+            </Transition>
+            <!-- Backdrop to close menu -->
+            <div v-if="showSortMenu" class="fixed inset-0 z-20" @click="showSortMenu = false"></div>
+          </div>
+
+          <!-- Mobile filter button -->
+          <button
+            class="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
+            @click="showMobileSheet = true"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            分类
+          </button>
+        </div>
       </div>
 
       <div v-if="mixedItems.length" class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -104,3 +161,17 @@ const totalCount = computed(() => filteredArticles.value.length)
   <TagBottomSheet v-model:open="showMobileSheet" :active-tag="currentTag" />
   </div>
 </template>
+
+<style scoped>
+.sort-menu-enter-active {
+  transition: all 0.2s ease;
+}
+.sort-menu-leave-active {
+  transition: all 0.15s ease;
+}
+.sort-menu-enter-from,
+.sort-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+}
+</style>

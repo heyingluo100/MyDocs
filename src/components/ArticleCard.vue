@@ -1,11 +1,16 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useReadStatus } from '../composables/useReadStatus.js'
 
-defineProps({
+const props = defineProps({
   article: { type: Object, required: true }
 })
 
 const router = useRouter()
+const { getArticleDotType } = useReadStatus()
+
+const dotType = computed(() => getArticleDotType(props.article))
 
 const handleCollectionClick = (e, collectionSlug) => {
   e.preventDefault()
@@ -17,8 +22,14 @@ const handleCollectionClick = (e, collectionSlug) => {
 <template>
   <router-link
     :to="`/article/${article.slug}`"
-    class="block bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300 group"
+    class="relative block bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300 group"
   >
+    <!-- Status dot -->
+    <span
+      v-if="dotType"
+      class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-linear-bg-secondary"
+      :class="dotType === 'new' ? 'bg-linear-success' : 'bg-amber-500'"
+    ></span>
     <div class="flex items-center gap-2 mb-2 flex-wrap">
       <span
         v-for="tag in article.tags"

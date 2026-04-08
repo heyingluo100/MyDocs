@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadHistory } from '../composables/useReadHistory.js'
+import { useReadStatus } from '../composables/useReadStatus.js'
 import ArticleContent from '../components/ArticleContent.vue'
 
 // Reading progress + sticky bar + position saving
@@ -39,6 +40,7 @@ const route = useRoute()
 const router = useRouter()
 const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
+const { markAsRead: markStatusRead } = useReadStatus()
 
 // Dialog states
 const showDeletedDialog = ref(false)
@@ -102,6 +104,7 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
     markAsRead(newSlug, current.content)
+    markStatusRead(newSlug)
 
     // Check for saved reading position
     const pos = getReadingPosition(newSlug)

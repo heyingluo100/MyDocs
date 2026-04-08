@@ -1,12 +1,14 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
+import { useReadStatus } from '../composables/useReadStatus.js'
 import ArticleCard from '../components/ArticleCard.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { getArticlesByCollection, getCollectionBySlug } = useArticles()
+const { markCollectionAsRead } = useReadStatus()
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -19,6 +21,13 @@ const goBack = () => {
 const collectionSlug = computed(() => decodeURIComponent(route.params.slug || ''))
 const collection = computed(() => getCollectionBySlug(collectionSlug.value))
 const collectionArticles = computed(() => getArticlesByCollection(collectionSlug.value))
+
+// Mark collection as read on enter
+watch(collection, (col) => {
+  if (col) {
+    markCollectionAsRead(col.slug, col.count)
+  }
+}, { immediate: true })
 </script>
 
 <template>
