@@ -1,13 +1,14 @@
 {
   "name": "personal-docs",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node scripts/build-content.js && vite",
     "build": "node scripts/build-content.js && vite build",
     "preview": "vite preview",
-    "content": "node scripts/build-content.js"
+    "content": "node scripts/build-content.js",
+    "gen-code": "node scripts/generate-code.js"
   },
   "dependencies": {
     "jszip": "^3.10.1",

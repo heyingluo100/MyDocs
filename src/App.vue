@@ -1,14 +1,21 @@
 <script setup>
+import { computed } from 'vue'
 import { RouterView } from 'vue-router'
 import { useRouter } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
 import CategorySidebar from './components/CategorySidebar.vue'
 import WatermarkLayer from './components/WatermarkLayer.vue'
+import InvitationGate from './components/InvitationGate.vue'
 import { useTheme } from './composables/useTheme.js'
 import { useProtection } from './composables/useProtection.js'
+import { useInvitation } from './composables/useInvitation.js'
+import invitationConfig from './config/invitation.js'
 
 useTheme()
 useProtection()
+
+const { globalVerified } = useInvitation()
+const showGate = computed(() => invitationConfig.global.enabled && !globalVerified.value)
 
 const router = useRouter()
 
@@ -38,7 +45,10 @@ const handleEnter = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-linear-bg text-linear-text font-sans overflow-x-hidden flex flex-col">
+  <!-- 全站邀请码验证 -->
+  <InvitationGate v-if="showGate" />
+  <!-- 正常内容 -->
+  <div v-else class="min-h-screen bg-linear-bg text-linear-text font-sans overflow-x-hidden flex flex-col">
     <AppHeader />
     <div class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex gap-8">
       <CategorySidebar />

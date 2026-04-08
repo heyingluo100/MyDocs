@@ -5,7 +5,9 @@ import { useArticles } from '../composables/useArticles.js'
 import { useReadHistory } from '../composables/useReadHistory.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
 import { useReadingPrefs } from '../composables/useReadingPrefs.js'
+import { useInvitation } from '../composables/useInvitation.js'
 import ArticleContent from '../components/ArticleContent.vue'
+import ArticleLockOverlay from '../components/ArticleLockOverlay.vue'
 
 // Reading progress + sticky bar + position saving
 const readingProgress = ref(0)
@@ -43,6 +45,10 @@ const router = useRouter()
 const { getArticleBySlug, decodeContent, articles, getAdjacentArticles } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
+const { checkArticleAccess } = useInvitation()
+
+// Article lock state
+const articleUnlocked = ref(true)
 
 // Dialog states
 const showDeletedDialog = ref(false)
@@ -119,9 +125,22 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
   frozenContent.value = ''
   frozenArticle.value = null
   pendingArticle.value = null
+  articleUnlocked.value = true
 
   const current = getArticleBySlug(newSlug)
   if (!current) return
+
+  // Check article lock
+  if (current.locked && current.lockHash) {
+    articleUnlocked.value = checkArticleAccess(newSlug, current.lockHash)
+    if (!articleUnlocked.value) {
+      // Still freeze the article metadata (for title display), but content stays locked
+      frozenArticle.value = { ...current }
+      frozenContent.value = current.content
+      isInitialLoad = false
+      return
+    }
+  }
 
   // On SPA navigation (not page refresh), check history for updates
   if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, current.content)) {
@@ -238,6 +257,22 @@ const handleStartFresh = () => {
   if (route.params.slug) clearReadingPosition(route.params.slug)
 }
 
+// Article unlock: after entering correct code, initialize normal reading flow
+const handleArticleUnlocked = () => {
+  articleUnlocked.value = true
+  const slug = route.params.slug
+  const current = getArticleBySlug(slug)
+  if (current) {
+    markAsRead(slug, current.content)
+    markStatusRead(slug)
+    const pos = getReadingPosition(slug)
+    if (pos) {
+      savedProgress.value = pos
+      showContinueDialog.value = true
+    }
+  }
+}
+
 // Display article: use frozen snapshot
 const displayArticle = computed(() => frozenArticle.value)
 
@@ -332,8 +367,18 @@ const adjacent = computed(() => {
       </div>
     </header>
 
-    <!-- Article content (protected) -->
-    <ArticleContent :html="htmlContent" />
+    <!-- Article lock overlay -->
+    <ArticleLockOverlay
+      v-if="displayArticle?.locked && !articleUnlocked"
+      :title="displayArticle.title"
+      :lock-hash="displayArticle.lockHash"
+      :slug="displayArticle.slug"
+      @unlocked="handleArticleUnlocked"
+    />
+
+    <!-- Article content (protected) — hidden when locked -->
+    <template v-if="articleUnlocked">
+      <ArticleContent :html="htmlContent" />
 
     <!-- Attached files -->
     <div v-if="displayArticle && displayArticle.files && displayArticle.files.length" class="mt-10 pt-6 border-t border-linear-border/50">
@@ -405,6 +450,7 @@ const adjacent = computed(() => {
         <div v-else class="flex-1"></div>
       </div>
     </nav>
+    </template>
   </div>
 
   <div v-else-if="!showDeletedDialog" class="text-center py-20">

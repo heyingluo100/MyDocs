@@ -184,6 +184,8 @@ async function buildArticles() {
 
     if (file.startsWith('~$')) return null
     if (file === '.tags') return null
+    if (ext === '.lock') return null
+    if (file.endsWith('.tags')) return null
     if (fs.statSync(filePath).isDirectory()) return null
 
     const primaryTag = tags[0]
@@ -192,11 +194,20 @@ async function buildArticles() {
       : slugify(primaryTag + '-' + baseName)
     const slug = slugBase || baseName
 
+    // Check for .lock file (article-level invitation code)
+    const lockFilePath = path.join(path.dirname(filePath), baseName + '.lock')
+    let locked = false
+    let lockHash = ''
+    if (fs.existsSync(lockFilePath)) {
+      lockHash = fs.readFileSync(lockFilePath, 'utf-8').trim()
+      if (lockHash) locked = true
+    }
+
     if (MARKDOWN_EXTS.includes(ext)) {
       try {
         const result = await processMarkdown(filePath)
         return {
-          slug, title: result.title, tags,
+          slug, title: result.title, tags, locked, lockHash,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -210,7 +221,7 @@ async function buildArticles() {
       try {
         const result = await processDocx(filePath)
         return {
-          slug, title: result.title, tags,
+          slug, title: result.title, tags, locked, lockHash,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -224,7 +235,7 @@ async function buildArticles() {
       try {
         const result = await processDoc(filePath)
         return {
-          slug, title: result.title, tags,
+          slug, title: result.title, tags, locked, lockHash,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -238,7 +249,7 @@ async function buildArticles() {
       try {
         const result = processText(filePath)
         return {
-          slug, title: result.title, tags,
+          slug, title: result.title, tags, locked, lockHash,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -253,7 +264,7 @@ async function buildArticles() {
       filesCopied++
       const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
       return {
-        slug, title: baseName, tags: [...tags],
+        slug, title: baseName, tags: [...tags], locked, lockHash,
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
@@ -306,11 +317,25 @@ async function buildArticles() {
         const extraTags = readExtraTags(path.join(filePath, '.tags'))
         const collectionTags = [tag, ...extraTags.filter(t => t !== tag)]
 
+        // Read collection-level .lock file (locks all articles in this collection)
+        const colLockPath = path.join(filePath, '.lock')
+        let colLocked = false
+        let colLockHash = ''
+        if (fs.existsSync(colLockPath)) {
+          colLockHash = fs.readFileSync(colLockPath, 'utf-8').trim()
+          if (colLockHash) colLocked = true
+        }
+
         let count = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
           const article = await processFile(subFilePath, collectionTags, collectionName, colSlug)
           if (article) {
+            // Collection-level lock applies to all articles (unless article has its own .lock)
+            if (colLocked && !article.locked) {
+              article.locked = true
+              article.lockHash = colLockHash
+            }
             articles.push(article)
             count++
           }
