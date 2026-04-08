@@ -2,6 +2,7 @@
 import { RouterView } from 'vue-router'
 import { useRouter } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
+import CategorySidebar from './components/CategorySidebar.vue'
 import WatermarkLayer from './components/WatermarkLayer.vue'
 import { useTheme } from './composables/useTheme.js'
 import { useProtection } from './composables/useProtection.js'
@@ -39,13 +40,16 @@ const handleEnter = () => {
 <template>
   <div class="min-h-screen bg-linear-bg text-linear-text font-sans overflow-x-hidden flex flex-col">
     <AppHeader />
-    <main class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-      <RouterView v-slot="{ Component }">
-        <Transition name="page" mode="out-in" @enter="handleEnter">
-          <component :is="Component" />
-        </Transition>
-      </RouterView>
-    </main>
+    <div class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex gap-8">
+      <CategorySidebar />
+      <main class="flex-1 min-w-0">
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in" @enter="handleEnter">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
+      </main>
+    </div>
     <footer class="relative z-10 mt-auto">
       <div class="max-w-7xl mx-auto px-6 py-8 flex justify-center">
         <p class="text-xs text-linear-text-secondary/20 font-light tracking-widest">

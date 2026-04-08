@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
-import TagPopover from '../components/TagPopover.vue'
 import TagBottomSheet from '../components/TagBottomSheet.vue'
 import ArticleCard from '../components/ArticleCard.vue'
 import CollectionCard from '../components/CollectionCard.vue'
@@ -72,15 +71,9 @@ const totalCount = computed(() => filteredArticles.value.length)
 
 <template>
   <div>
-    <div class="flex flex-col lg:flex-row gap-8">
-    <!-- Desktop sidebar (popover trigger) -->
-    <div class="hidden lg:block shrink-0">
-      <TagPopover :active-tag="currentTag" />
-    </div>
-
     <!-- Article list -->
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-3 mb-6">
+      <div class="flex items-center gap-3 mb-4">
         <h1 class="text-xl font-bold text-linear-text">
           {{ currentTag || '全部文档' }}
         </h1>
@@ -155,7 +148,6 @@ const totalCount = computed(() => filteredArticles.value.length)
         <p class="text-linear-text-secondary">暂无文档</p>
       </div>
     </div>
-  </div>
 
   <!-- Mobile bottom sheet -->
   <TagBottomSheet v-model:open="showMobileSheet" :active-tag="currentTag" />
