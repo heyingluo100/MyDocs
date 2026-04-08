@@ -149,8 +149,8 @@
       "tags": [
         "PERSONA4"
       ],
-      "locked": false,
-      "lockHash": "",
+      "locked": true,
+      "lockHash": "ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae",
       "collection": null,
       "collectionSlug": null,
       "createdAt": "2025-07-16",

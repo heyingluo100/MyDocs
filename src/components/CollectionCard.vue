@@ -11,6 +11,7 @@ const { getCollectionDotType } = useReadStatus()
 
 const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
 const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
+const allLocked = computed(() => props.articles.length > 0 && props.articles.every(a => a.locked))
 </script>
 
 <template>
@@ -49,6 +50,9 @@ const dotType = computed(() => getCollectionDotType(props.collection.slug, props
         <h3 class="text-base font-semibold text-linear-text group-hover:text-linear-accent transition-colors">
           {{ collection.name }}
         </h3>
+        <svg v-if="allLocked" class="w-3.5 h-3.5 text-linear-text-secondary/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
       </div>
 
       <p v-if="latestTitle" class="text-sm text-linear-text-secondary line-clamp-1">

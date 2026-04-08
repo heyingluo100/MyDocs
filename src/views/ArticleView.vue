@@ -55,6 +55,8 @@ const showDeletedDialog = ref(false)
 const showUpdatedDialog = ref(false)
 const showTocDialog = ref(false)
 const showContinueDialog = ref(false)
+const showLockedNavDialog = ref(false)
+const pendingNavTarget = ref(null)
 const savedProgress = ref(0)
 const deletedTitle = ref('')
 
@@ -66,14 +68,14 @@ const contentAreaRef = ref(null)
 const handleContentTap = (e) => {
   // Only on mobile (<1024px)
   if (window.innerWidth >= 1024) return
-  // Ignore taps on links, buttons, or interactive elements
-  if (e.target.closest('a, button, [role="button"]')) return
+  // Ignore taps on links, buttons, inputs or interactive elements
+  if (e.target.closest('a, button, input, [role="button"], form')) return
   const rect = contentAreaRef.value?.getBoundingClientRect()
   if (!rect) return
   const y = e.clientY - rect.top
-  const third = rect.height / 3
-  // Only trigger on center 1/3
-  if (y > third && y < third * 2) {
+  const fifth = rect.height / 5
+  // Trigger on center 3/5 (top 1/5 and bottom 1/5 excluded)
+  if (y > fifth && y < fifth * 4) {
     showReadingMenu.value = !showReadingMenu.value
   }
 }
@@ -84,6 +86,10 @@ watch(showReadingMenu, (val) => {
 
 // TOC 弹出层打开时锁定背景滚动
 watch(showTocDialog, (val) => {
+  document.body.style.overflow = val ? 'hidden' : ''
+})
+
+watch(showLockedNavDialog, (val) => {
   document.body.style.overflow = val ? 'hidden' : ''
 })
 
@@ -189,6 +195,15 @@ watch(articles, () => {
 
   // First load: articles just arrived from fetch — always show latest (this is a page refresh)
   if (!frozenContent.value && !frozenArticle.value) {
+    // Check article lock on first load too
+    if (current.locked && current.lockHash) {
+      articleUnlocked.value = checkArticleAccess(slug, current.lockHash)
+      if (!articleUnlocked.value) {
+        frozenArticle.value = { ...current }
+        frozenContent.value = current.content
+        return
+      }
+    }
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
     markAsRead(slug, current.content)
@@ -271,6 +286,29 @@ const handleArticleUnlocked = () => {
       showContinueDialog.value = true
     }
   }
+}
+
+// Navigation: check lock before jumping
+const handleNavTo = (target) => {
+  if (target.locked && target.lockHash && !checkArticleAccess(target.slug, target.lockHash)) {
+    pendingNavTarget.value = target
+    showLockedNavDialog.value = true
+  } else {
+    router.replace(`/article/${target.slug}`)
+  }
+}
+
+const handleNavConfirm = () => {
+  showLockedNavDialog.value = false
+  if (pendingNavTarget.value) {
+    router.replace(`/article/${pendingNavTarget.value.slug}`)
+    pendingNavTarget.value = null
+  }
+}
+
+const handleNavCancel = () => {
+  showLockedNavDialog.value = false
+  pendingNavTarget.value = null
 }
 
 // Display article: use frozen snapshot
@@ -399,25 +437,30 @@ const adjacent = computed(() => {
         </router-link>
       </div>
     </div>
+    </template>
 
-    <!-- Article navigation: prev / toc / next -->
+    <!-- Article navigation: always visible (even when locked) -->
     <nav v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
       <div class="flex items-center justify-between gap-4">
         <!-- Prev -->
-        <router-link
-          v-if="adjacent.prev"
-          :to="`/article/${adjacent.prev.slug}`"
-          replace
-          class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group"
-        >
-          <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
-          </svg>
-          <div class="min-w-0">
-            <p class="text-xs text-linear-text-secondary">上一篇</p>
-            <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors">{{ adjacent.prev.title }}</p>
-          </div>
-        </router-link>
+        <div v-if="adjacent.prev" class="flex-1 min-w-0">
+          <a
+            href="#"
+            @click.prevent="handleNavTo(adjacent.prev)"
+            class="flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group"
+          >
+            <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+            </svg>
+            <div class="min-w-0">
+              <p class="text-xs text-linear-text-secondary">上一篇</p>
+              <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors flex items-center gap-1">
+                <svg v-if="adjacent.prev.locked" class="w-3 h-3 text-linear-text-secondary/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                {{ adjacent.prev.title }}
+              </p>
+            </div>
+          </a>
+        </div>
         <div v-else class="flex-1"></div>
 
         <!-- TOC button -->
@@ -433,24 +476,27 @@ const adjacent = computed(() => {
         </button>
 
         <!-- Next -->
-        <router-link
-          v-if="adjacent.next"
-          :to="`/article/${adjacent.next.slug}`"
-          replace
-          class="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group justify-end text-right"
-        >
-          <div class="min-w-0">
-            <p class="text-xs text-linear-text-secondary">下一篇</p>
-            <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors">{{ adjacent.next.title }}</p>
-          </div>
-          <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
-          </svg>
-        </router-link>
+        <div v-if="adjacent.next" class="flex-1 min-w-0">
+          <a
+            href="#"
+            @click.prevent="handleNavTo(adjacent.next)"
+            class="flex items-center gap-2 px-4 py-3 rounded-xl bg-linear-bg-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors group justify-end text-right"
+          >
+            <div class="min-w-0">
+              <p class="text-xs text-linear-text-secondary">下一篇</p>
+              <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors flex items-center justify-end gap-1">
+                {{ adjacent.next.title }}
+                <svg v-if="adjacent.next.locked" class="w-3 h-3 text-linear-text-secondary/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+              </p>
+            </div>
+            <svg class="w-4 h-4 text-linear-text-secondary shrink-0 group-hover:text-linear-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+        </div>
         <div v-else class="flex-1"></div>
       </div>
     </nav>
-    </template>
   </div>
 
   <div v-else-if="!showDeletedDialog" class="text-center py-20">
@@ -462,20 +508,30 @@ const adjacent = computed(() => {
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="showReadingMenu" class="fixed inset-0 z-50 lg:hidden" @click.self="showReadingMenu = false">
-        <!-- Top bar: font size -->
+        <!-- Top bar: back + font size -->
         <div class="reading-menu-top absolute top-0 inset-x-0 bg-linear-bg/95 backdrop-blur-md border-b border-linear-border/30 safe-area-top">
-          <div class="flex items-center justify-center gap-2 px-6 py-4">
+          <div class="flex items-center gap-3 px-6 py-4">
             <button
-              v-for="size in FONT_SIZES"
-              :key="size.key"
-              @click="currentSize = size.key"
-              class="flex items-center justify-center min-w-[3rem] px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200"
-              :class="currentSize === size.key
-                ? 'bg-linear-accent text-white'
-                : 'bg-linear-bg-secondary text-linear-text-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary'"
+              @click="showReadingMenu = false; goBack()"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 -ml-2.5 rounded-lg text-linear-text-secondary active:bg-linear-bg-tertiary transition-colors shrink-0"
             >
-              {{ size.label }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
+            <div class="flex items-center justify-center gap-2 flex-1">
+              <button
+                v-for="size in FONT_SIZES"
+                :key="size.key"
+                @click="currentSize = size.key"
+                class="flex items-center justify-center min-w-[3rem] px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200"
+                :class="currentSize === size.key
+                  ? 'bg-linear-accent text-white'
+                  : 'bg-linear-bg-secondary text-linear-text-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary'"
+              >
+                {{ size.label }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -485,7 +541,7 @@ const adjacent = computed(() => {
             <!-- Nav row -->
             <div class="flex items-center justify-around mb-2">
               <button
-                @click="showReadingMenu = false; adjacent.prev && router.replace(`/article/${adjacent.prev.slug}`)"
+                @click="showReadingMenu = false; adjacent.prev && handleNavTo(adjacent.prev)"
                 :disabled="!adjacent.prev"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.prev ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -509,7 +565,7 @@ const adjacent = computed(() => {
               </button>
 
               <button
-                @click="showReadingMenu = false; adjacent.next && router.replace(`/article/${adjacent.next.slug}`)"
+                @click="showReadingMenu = false; adjacent.next && handleNavTo(adjacent.next)"
                 :disabled="!adjacent.next"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.next ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -518,16 +574,6 @@ const adjacent = computed(() => {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
                 </svg>
                 <span class="text-xs">下一章</span>
-              </button>
-
-              <button
-                @click="showReadingMenu = false; goBack()"
-                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl text-linear-text-secondary active:bg-linear-bg-tertiary transition-colors"
-              >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span class="text-xs">退出</span>
               </button>
             </div>
           </div>
@@ -561,22 +607,24 @@ const adjacent = computed(() => {
             </button>
           </div>
           <nav class="space-y-1 max-h-[60vh] overflow-y-auto px-4">
-            <router-link
+            <a
               v-for="(item, i) in adjacent.siblings"
               :key="item.slug"
-              :to="`/article/${item.slug}`"
-              replace
-              @click="showTocDialog = false"
+              href="#"
+              @click.prevent="showTocDialog = false; item.slug === displayArticle?.slug ? null : handleNavTo(item)"
               :class="[
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-300',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-300 cursor-pointer',
                 item.slug === displayArticle?.slug
                   ? 'bg-linear-accent/10 text-linear-accent font-medium'
                   : 'text-linear-text-secondary hover:bg-linear-bg-tertiary hover:text-linear-text'
               ]"
             >
               <span class="text-xs text-linear-text-secondary/50 w-5 text-center shrink-0">{{ i + 1 }}</span>
-              <span class="truncate">{{ item.title }}</span>
-            </router-link>
+              <span class="truncate flex-1">{{ item.title }}</span>
+              <svg v-if="item.locked" class="w-3.5 h-3.5 text-linear-text-secondary/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            </a>
           </nav>
         </div>
       </div>
@@ -678,6 +726,42 @@ const adjacent = computed(() => {
               class="flex-1 py-2.5 rounded-xl bg-linear-accent text-white text-sm font-medium hover:bg-linear-accent-hover transition-colors"
             >
               继续阅读
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Locked article navigation dialog -->
+    <Transition name="fade">
+      <div v-if="showLockedNavDialog" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="handleNavCancel"></div>
+        <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-linear-text">文章已锁定</h3>
+              <p class="text-sm text-linear-text-secondary mt-1">
+                「{{ pendingNavTarget?.title }}」需要邀请码才能查看，是否前往？
+              </p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="handleNavCancel"
+              class="flex-1 py-2.5 rounded-xl bg-linear-bg-secondary border border-linear-border text-sm text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+            >
+              取消
+            </button>
+            <button
+              @click="handleNavConfirm"
+              class="flex-1 py-2.5 rounded-xl bg-linear-accent text-white text-sm font-medium hover:bg-linear-accent-hover transition-colors"
+            >
+              前往
             </button>
           </div>
         </div>

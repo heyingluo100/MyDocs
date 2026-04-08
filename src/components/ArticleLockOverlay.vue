@@ -36,7 +36,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative min-h-[60vh]">
     <!-- Blurred placeholder content -->
     <div class="select-none pointer-events-none" aria-hidden="true">
       <div class="space-y-4 filter blur-md opacity-40">
