@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 
@@ -22,6 +22,14 @@ const close = () => {
 
 watch(() => route.fullPath, () => {
   close()
+})
+
+// 弹出层打开时锁定背景滚动
+watch(() => props.open, (val) => {
+  document.body.style.overflow = val ? 'hidden' : ''
+})
+onBeforeUnmount(() => {
+  document.body.style.overflow = ''
 })
 </script>
 

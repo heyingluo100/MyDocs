@@ -30,6 +30,7 @@ const updateProgress = () => {
 onMounted(() => window.addEventListener('scroll', updateProgress, { passive: true }))
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateProgress)
+  document.body.style.overflow = ''
   // Save position on leave (use currentSlug, not route — route has already changed)
   if (currentSlug.value) {
     saveReadingPosition(currentSlug.value, readingProgress.value)
@@ -49,6 +50,11 @@ const showTocDialog = ref(false)
 const showContinueDialog = ref(false)
 const savedProgress = ref(0)
 const deletedTitle = ref('')
+
+// TOC 弹出层打开时锁定背景滚动
+watch(showTocDialog, (val) => {
+  document.body.style.overflow = val ? 'hidden' : ''
+})
 
 // 'realtime' = 正在看时后台改了, 'history' = 之前读过，再打开发现有更新
 const updateReason = ref('')
