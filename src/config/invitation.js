@@ -14,6 +14,6 @@ export default {
   // ═══ 单篇锁 ═══
   // 开启后，带 .lock 文件的文章需要额外输入邀请码
   article: {
-    enabled: true,
+    enabled: false,
   }
 }
