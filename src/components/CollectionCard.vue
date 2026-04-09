@@ -20,7 +20,7 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
 <template>
   <router-link
     :to="`/collection/${encodeURIComponent(collection.slug)}`"
-    class="block relative group"
+    class="block relative group pb-3 pr-3"
   >
     <!-- Stacked layers behind -->
     <div class="absolute inset-0 bg-linear-bg-tertiary/60 rounded-2xl border border-linear-border/30 translate-x-1.5 translate-y-1.5"></div>
