@@ -65,19 +65,40 @@ const { FONT_SIZES, currentSize } = useReadingPrefs()
 const showReadingMenu = ref(false)
 const contentAreaRef = ref(null)
 
-const handleContentTap = (e) => {
+let touchStartY = 0
+let touchStartTime = 0
+let touchMoved = false
+
+const handleTouchStart = (e) => {
+  touchStartY = e.touches[0].clientY
+  touchStartTime = Date.now()
+  touchMoved = false
+}
+
+const handleTouchMove = () => {
+  touchMoved = true
+}
+
+const handleTouchEnd = (e) => {
+  // Ignore if scrolled or long press
+  if (touchMoved || Date.now() - touchStartTime > 300) return
   // Only on mobile (<1024px)
   if (window.innerWidth >= 1024) return
-  // Ignore taps on links, buttons, inputs or interactive elements
+  // Ignore taps on interactive elements
   if (e.target.closest('a, button, input, [role="button"], form')) return
   const rect = contentAreaRef.value?.getBoundingClientRect()
   if (!rect) return
-  const y = e.clientY - rect.top
+  const y = touchStartY - rect.top
   const fifth = rect.height / 5
-  // Trigger on center 3/5 (top 1/5 and bottom 1/5 excluded)
   if (y > fifth && y < fifth * 4) {
+    e.preventDefault()
     showReadingMenu.value = !showReadingMenu.value
   }
+}
+
+const handleContentTap = (e) => {
+  // Desktop fallback only (mobile uses touchend)
+  if (window.innerWidth < 1024) return
 }
 
 watch(showReadingMenu, (val) => {
@@ -378,7 +399,7 @@ const adjacent = computed(() => {
   </Transition>
 
   <!-- Show snapshot content if user chose "later", otherwise show live content -->
-  <div v-if="displayArticle" ref="contentAreaRef" class="max-w-3xl mx-auto" @click="handleContentTap">
+  <div v-if="displayArticle" ref="contentAreaRef" class="max-w-3xl mx-auto" @click="handleContentTap" @touchstart.passive="handleTouchStart" @touchmove.passive="handleTouchMove" @touchend="handleTouchEnd">
     <!-- Back button -->
     <a
       href="#"
