@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
@@ -27,6 +28,30 @@ const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
 function getFileDates(filePath) {
+  try {
+    // Use git log for stable dates across environments (Vercel, CI, etc.)
+    const relPath = path.relative(root, filePath).replace(/\\/g, '/')
+    // First commit date = createdAt
+    const gitCreated = execSync(
+      `git log --diff-filter=A --follow --format=%aI -- "${relPath}"`,
+      { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim().split('\n').pop()
+    // Latest commit date = updatedAt
+    const gitUpdated = execSync(
+      `git log -1 --format=%aI -- "${relPath}"`,
+      { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim()
+
+    if (gitCreated && gitUpdated) {
+      return {
+        createdAt: gitCreated.split('T')[0],
+        updatedAt: gitUpdated.split('T')[0]
+      }
+    }
+  } catch {
+    // git not available or file not tracked — fall through
+  }
+  // Fallback to filesystem dates
   const stat = fs.statSync(filePath)
   return {
     createdAt: stat.birthtime.toISOString().split('T')[0],

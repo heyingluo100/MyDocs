@@ -13,6 +13,26 @@ const { checkArticleAccess } = useInvitation()
 
 const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
 const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
+
+// Earliest createdAt among all articles in collection
+const createdAt = computed(() => {
+  if (!props.articles.length) return ''
+  return props.articles.reduce((min, a) => a.createdAt < min ? a.createdAt : min, props.articles[0].createdAt)
+})
+
+// Latest updatedAt among all articles in collection
+const updatedAt = computed(() => {
+  if (!props.articles.length) return ''
+  return props.articles.reduce((max, a) => {
+    const d = a.updatedAt || a.createdAt
+    return d > max ? d : max
+  }, props.articles[0].updatedAt || props.articles[0].createdAt)
+})
+
+// Total word count of all articles
+const totalWords = computed(() => {
+  return props.articles.reduce((sum, a) => sum + (a.wordCount || 0), 0)
+})
 const allLocked = computed(() => props.articles.length > 0 && props.articles.every(a => a.locked))
 const allUnlocked = computed(() => allLocked.value && props.articles.every(a => checkArticleAccess(a.slug, a.lockHash)))
 </script>
@@ -20,14 +40,14 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
 <template>
   <router-link
     :to="`/collection/${encodeURIComponent(collection.slug)}`"
-    class="block relative group pb-3 pr-3"
+    class="flex flex-col relative group pb-3 pr-3"
   >
     <!-- Stacked layers behind -->
     <div class="absolute inset-0 bg-linear-bg-tertiary/60 rounded-2xl border border-linear-border/30 translate-x-1.5 translate-y-1.5"></div>
     <div class="absolute inset-0 bg-linear-bg-tertiary/40 rounded-2xl border border-linear-border/20 translate-x-3 translate-y-3"></div>
 
     <!-- Main card -->
-    <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
+    <div class="relative flex-1 bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
       <!-- Status dot -->
       <span
         v-if="dotType"
@@ -64,9 +84,21 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
         </svg>
       </div>
 
-      <p v-if="latestTitle" class="text-sm text-linear-text-secondary line-clamp-1">
+      <p v-if="latestTitle" class="text-sm text-linear-text-secondary line-clamp-1 mb-3">
         最新：{{ latestTitle }}
       </p>
+
+      <div class="flex items-center gap-2">
+        <span v-if="createdAt" class="text-xs text-linear-text-secondary/60">
+          {{ createdAt }}
+        </span>
+        <span v-if="updatedAt && updatedAt !== createdAt" class="text-xs text-linear-text-secondary/40">
+          · 更新于 {{ updatedAt }}
+        </span>
+        <span v-if="totalWords" class="text-xs text-linear-text-secondary/40">
+          · {{ totalWords >= 10000 ? (totalWords / 10000).toFixed(1) + '万' : totalWords }} 字
+        </span>
+      </div>
     </div>
   </router-link>
 </template>
