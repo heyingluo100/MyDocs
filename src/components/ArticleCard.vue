@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useReadStatus } from '../composables/useReadStatus.js'
+import { useInvitation } from '../composables/useInvitation.js'
 
 const props = defineProps({
   article: { type: Object, required: true }
@@ -9,8 +10,10 @@ const props = defineProps({
 
 const router = useRouter()
 const { getArticleDotType } = useReadStatus()
+const { checkArticleAccess } = useInvitation()
 
 const dotType = computed(() => getArticleDotType(props.article))
+const isUnlocked = computed(() => props.article.locked && checkArticleAccess(props.article.slug, props.article.lockHash))
 
 const handleCollectionClick = (e, collectionSlug) => {
   e.preventDefault()
@@ -48,8 +51,11 @@ const handleCollectionClick = (e, collectionSlug) => {
       </a>
     </div>
     <h3 class="text-base font-semibold text-linear-text group-hover:text-linear-accent transition-colors mb-2 flex items-center gap-1.5">
-      <svg v-if="article.locked" class="w-3.5 h-3.5 text-linear-text-secondary/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+      <svg v-if="article.locked && !isUnlocked" class="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+      </svg>
+      <svg v-else-if="article.locked" class="w-3.5 h-3.5 text-linear-success/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
       </svg>
       {{ article.title }}
     </h3>
