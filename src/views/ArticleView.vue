@@ -343,8 +343,22 @@ const displayArticle = computed(() => frozenArticle.value)
 const adjacent = computed(() => {
   if (!displayArticle.value) return { prev: null, next: null, siblings: [] }
   const result = getAdjacentArticles(displayArticle.value.slug, navContextTag.value)
-  // Sort siblings to match homepage sort order
+  const ctxTag = navContextTag.value
+  // Sort siblings: pinned first, then by date
   const sorted = [...result.siblings].sort((a, b) => {
+    const aGlobalPin = a.pinned && !a.pinTag
+    const bGlobalPin = b.pinned && !b.pinTag
+    const aTagPin = a.pinned && a.pinTag && a.pinTag === ctxTag
+    const bTagPin = b.pinned && b.pinTag && b.pinTag === ctxTag
+    const aPinned = aGlobalPin || aTagPin
+    const bPinned = bGlobalPin || bTagPin
+    if (aPinned && !bPinned) return -1
+    if (!aPinned && bPinned) return 1
+    if (aPinned && bPinned) {
+      if (aGlobalPin && !bGlobalPin) return -1
+      if (!aGlobalPin && bGlobalPin) return 1
+      return a.pinOrder - b.pinOrder
+    }
     const dateA = sortBy.value === 'updated' ? (a.updatedAt || a.createdAt) : a.createdAt
     const dateB = sortBy.value === 'updated' ? (b.updatedAt || b.createdAt) : b.createdAt
     return dateB.localeCompare(dateA)
@@ -670,6 +684,9 @@ const adjacent = computed(() => {
               ]"
             >
               <span class="text-xs text-linear-text-secondary/50 w-5 text-center shrink-0">{{ i + 1 }}</span>
+              <svg v-if="item.pinned" class="w-3 h-3 text-linear-accent/60 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M16 3a1 1 0 011.447.894l.553 5.53 2.553 1.277A1 1 0 0120 12.618V14a1 1 0 01-1 1h-5v6l-1 2-1-2v-6H7a1 1 0 01-1-1v-1.382a1 1 0 01-.447-.894L6 11.618l2.553-1.276L9.106 4.81A1 1 0 0110 4h6z" />
+              </svg>
               <span class="truncate flex-1">{{ item.title }}</span>
               <!-- Locked: show lock/unlock icon -->
               <svg v-if="item.locked && !checkArticleAccess(item.slug, item.lockHash)" class="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

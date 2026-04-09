@@ -184,7 +184,10 @@ async function buildArticles() {
 
     if (file.startsWith('~$')) return null
     if (file === '.tags') return null
+    if (file === '.lock') return null
+    if (file === '.pin') return null
     if (ext === '.lock') return null
+    if (ext === '.pin') return null
     if (file.endsWith('.tags')) return null
     if (fs.statSync(filePath).isDirectory()) return null
 
@@ -203,11 +206,27 @@ async function buildArticles() {
       if (lockHash) locked = true
     }
 
+    // Check for .pin file (article-level pinning)
+    const pinFilePath = path.join(path.dirname(filePath), baseName + '.pin')
+    let pinned = false
+    let pinOrder = 0
+    let pinTag = ''
+    if (fs.existsSync(pinFilePath)) {
+      pinned = true
+      const pinContent = fs.readFileSync(pinFilePath, 'utf-8').trim()
+      if (pinContent) {
+        const parts = pinContent.split(/\s+/)
+        const num = parseInt(parts[0], 10)
+        if (!isNaN(num)) pinOrder = num
+        if (parts.length > 1) pinTag = parts.slice(1).join(' ')
+      }
+    }
+
     if (MARKDOWN_EXTS.includes(ext)) {
       try {
         const result = await processMarkdown(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -221,7 +240,7 @@ async function buildArticles() {
       try {
         const result = await processDocx(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -235,7 +254,7 @@ async function buildArticles() {
       try {
         const result = await processDoc(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -249,7 +268,7 @@ async function buildArticles() {
       try {
         const result = processText(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -264,7 +283,7 @@ async function buildArticles() {
       filesCopied++
       const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
       return {
-        slug, title: baseName, tags: [...tags], locked, lockHash,
+        slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag,
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
@@ -326,6 +345,22 @@ async function buildArticles() {
           if (colLockHash) colLocked = true
         }
 
+        // Read collection-level .pin file (pins the collection)
+        const colPinPath = path.join(filePath, '.pin')
+        let colPinned = false
+        let colPinOrder = 0
+        let colPinTag = ''
+        if (fs.existsSync(colPinPath)) {
+          colPinned = true
+          const pinContent = fs.readFileSync(colPinPath, 'utf-8').trim()
+          if (pinContent) {
+            const parts = pinContent.split(/\s+/)
+            const num = parseInt(parts[0], 10)
+            if (!isNaN(num)) colPinOrder = num
+            if (parts.length > 1) colPinTag = parts.slice(1).join(' ')
+          }
+        }
+
         let count = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
@@ -342,7 +377,7 @@ async function buildArticles() {
         }
 
         if (count > 0) {
-          collections.push({ name: collectionName, slug: colSlug, tag, tags: collectionTags, count })
+          collections.push({ name: collectionName, slug: colSlug, tag, tags: collectionTags, count, pinned: colPinned, pinOrder: colPinOrder, pinTag: colPinTag })
         }
         continue
       }

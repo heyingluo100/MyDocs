@@ -64,8 +64,30 @@ const mixedItems = computed(() => {
     items.push({ type: 'article', article, sortDate })
   }
 
-  // Sort by selected order (newest first)
-  items.sort((a, b) => b.sortDate.localeCompare(a.sortDate))
+  // Sort: pinned first (global → tag-scoped), then by date
+  const tag = currentTag.value
+  items.sort((a, b) => {
+    const aData = a.type === 'collection' ? a.collection : a.article
+    const bData = b.type === 'collection' ? b.collection : b.article
+    // Determine pin status: global pin (pinTag empty) or tag-scoped pin (pinTag matches current tag)
+    const aGlobalPin = aData.pinned && !aData.pinTag
+    const bGlobalPin = bData.pinned && !bData.pinTag
+    const aTagPin = aData.pinned && aData.pinTag && aData.pinTag === tag
+    const bTagPin = bData.pinned && bData.pinTag && bData.pinTag === tag
+    const aPinned = aGlobalPin || aTagPin
+    const bPinned = bGlobalPin || bTagPin
+    // Pinned items first
+    if (aPinned && !bPinned) return -1
+    if (!aPinned && bPinned) return 1
+    // Among pinned: global before tag-scoped, then by pinOrder
+    if (aPinned && bPinned) {
+      if (aGlobalPin && !bGlobalPin) return -1
+      if (!aGlobalPin && bGlobalPin) return 1
+      return aData.pinOrder - bData.pinOrder
+    }
+    // Non-pinned: by date
+    return b.sortDate.localeCompare(a.sortDate)
+  })
 
   return items
 })

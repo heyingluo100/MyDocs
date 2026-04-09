@@ -20,7 +20,15 @@ const goBack = () => {
 
 const collectionSlug = computed(() => decodeURIComponent(route.params.slug || ''))
 const collection = computed(() => getCollectionBySlug(collectionSlug.value))
-const collectionArticles = computed(() => getArticlesByCollection(collectionSlug.value))
+const collectionArticles = computed(() => {
+  const articles = getArticlesByCollection(collectionSlug.value)
+  return [...articles].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
+    if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
+    return 0 // preserve original order (filename sort from build)
+  })
+})
 
 // Mark collection as read on enter
 watch(collection, (col) => {
