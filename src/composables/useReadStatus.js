@@ -27,9 +27,16 @@ export function useReadStatus() {
   }
 
   const isArticleRead = (slug, updatedAt) => {
-    const savedUpdatedAt = articleStatus[slug]
-    if (!savedUpdatedAt) return false
-    return savedUpdatedAt === updatedAt
+    const saved = articleStatus[slug]
+    if (!saved) return false
+    // New format: stored value is a date string like "2026-02-14"
+    if (saved === updatedAt) return true
+    // Old format: stored value is ISO timestamp like "2026-04-09T10:00:00.000Z"
+    // Extract date part and compare — user read it at that date, so if readDate >= updatedAt, it's read
+    if (saved.includes('T')) {
+      return saved.split('T')[0] >= updatedAt
+    }
+    return false
   }
 
   const markCollectionAsRead = (slug, articleCount) => {
@@ -59,7 +66,7 @@ export function useReadStatus() {
     }
 
     // Read before, but content has been updated since
-    if (articleStatus[article.slug] !== effectiveUpdatedAt) {
+    if (!isArticleRead(article.slug, effectiveUpdatedAt)) {
       return 'updated'
     }
 
