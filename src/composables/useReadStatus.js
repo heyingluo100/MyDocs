@@ -36,7 +36,8 @@ export function useReadStatus() {
     if (saved.includes('T')) {
       return saved.split('T')[0] >= updatedAt
     }
-    return false
+    // New format: plain date string comparison (e.g. "2026-04-07" >= "2026-02-14")
+    return saved >= updatedAt
   }
 
   const markCollectionAsRead = (slug, articleCount) => {
@@ -65,9 +66,14 @@ export function useReadStatus() {
       return null
     }
 
-    // Read before, but content has been updated since
+    // Read before, but content has been updated since — only alert within N days
     if (!isArticleRead(article.slug, effectiveUpdatedAt)) {
-      return 'updated'
+      const now = new Date()
+      const updated = new Date(effectiveUpdatedAt)
+      const daysSinceUpdated = (now - updated) / (1000 * 60 * 60 * 24)
+      if (daysSinceUpdated <= NEW_ARTICLE_DAYS) {
+        return 'updated'
+      }
     }
 
     return null
