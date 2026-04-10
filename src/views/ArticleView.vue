@@ -6,6 +6,7 @@ import { useReadHistory } from '../composables/useReadHistory.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
 import { useReadingPrefs } from '../composables/useReadingPrefs.js'
 import { useInvitation } from '../composables/useInvitation.js'
+import { useTheme } from '../composables/useTheme.js'
 import ArticleContent from '../components/ArticleContent.vue'
 import ArticleLockOverlay from '../components/ArticleLockOverlay.vue'
 
@@ -62,8 +63,25 @@ const deletedTitle = ref('')
 
 // Mobile reading overlay menu
 const { FONT_SIZES, currentSize } = useReadingPrefs()
+const { theme, toggleTheme } = useTheme()
 const showReadingMenu = ref(false)
 const contentAreaRef = ref(null)
+const bottomNavRef = ref(null)
+const bottomNavVisible = ref(false)
+
+// Track whether the static bottom nav is visible in viewport
+let bottomNavObserver = null
+onMounted(() => {
+  bottomNavObserver = new IntersectionObserver(([entry]) => {
+    bottomNavVisible.value = entry.isIntersecting
+  }, { threshold: 0.1 })
+})
+watch(bottomNavRef, (el) => {
+  if (el && bottomNavObserver) bottomNavObserver.observe(el)
+}, { immediate: true })
+onBeforeUnmount(() => {
+  bottomNavObserver?.disconnect()
+})
 
 let touchStartY = 0
 let touchStartX = 0
@@ -95,6 +113,8 @@ const handleTouchEnd = (e) => {
   if (window.innerWidth >= 1024) return
   // Ignore taps on interactive elements
   if (e.target.closest('a, button, input, [role="button"], form')) return
+  // Don't show floating menu when static bottom nav is already visible
+  if (bottomNavVisible.value) return
   const rect = contentAreaRef.value?.getBoundingClientRect()
   if (!rect) return
   // Use viewport height — tap in middle 4/5 of screen triggers menu (exclude top/bottom 1/10)
@@ -109,6 +129,20 @@ const handleTouchEnd = (e) => {
 const handleContentTap = (e) => {
   // Desktop fallback only (mobile uses touchend)
   if (window.innerWidth < 1024) return
+}
+
+// Floating menu nav: close menu first, then act on nextTick to avoid animation interference
+let menuNavFired = false
+const menuNav = (action) => {
+  if (menuNavFired) return
+  menuNavFired = true
+  showReadingMenu.value = false
+  nextTick(() => {
+    menuNavFired = false
+    if (action === 'prev' && adjacent.value.prev) handleNavTo(adjacent.value.prev)
+    else if (action === 'next' && adjacent.value.next) handleNavTo(adjacent.value.next)
+    else if (action === 'toc') showTocDialog.value = true
+  })
 }
 
 watch(showReadingMenu, (val) => {
@@ -195,7 +229,7 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
     markAsRead(newSlug, current.content)
-    markStatusRead(newSlug)
+    markStatusRead(newSlug, current.updatedAt || current.createdAt)
 
     // Check for saved reading position
     const pos = getReadingPosition(newSlug)
@@ -314,7 +348,7 @@ const handleArticleUnlocked = () => {
   const current = getArticleBySlug(slug)
   if (current) {
     markAsRead(slug, current.content)
-    markStatusRead(slug)
+    markStatusRead(slug, current.updatedAt || current.createdAt)
     const pos = getReadingPosition(slug)
     if (pos) {
       savedProgress.value = pos
@@ -501,7 +535,7 @@ const adjacent = computed(() => {
     </template>
 
     <!-- Article navigation: always visible (even when locked) -->
-    <nav v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
+    <nav ref="bottomNavRef" v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
       <div class="flex items-center justify-between gap-4">
         <!-- Prev -->
         <div v-if="adjacent.prev" class="flex-1 min-w-0">
@@ -595,6 +629,18 @@ const adjacent = computed(() => {
                 {{ size.label }}
               </button>
             </div>
+            <!-- Theme toggle -->
+            <button
+              @click="toggleTheme"
+              class="flex items-center justify-center w-10 h-10 rounded-xl shrink-0 bg-linear-bg-secondary text-linear-text-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors"
+            >
+              <svg v-if="theme === 'dark'" class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <svg v-else class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -604,7 +650,8 @@ const adjacent = computed(() => {
             <!-- Nav row -->
             <div class="flex items-center justify-around mb-2">
               <button
-                @click="showReadingMenu = false; adjacent.prev && handleNavTo(adjacent.prev)"
+                @touchend.stop.prevent="menuNav('prev')"
+                @click.stop="menuNav('prev')"
                 :disabled="!adjacent.prev"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.prev ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -616,7 +663,8 @@ const adjacent = computed(() => {
               </button>
 
               <button
-                @click="showReadingMenu = false; showTocDialog = true"
+                @touchend.stop.prevent="menuNav('toc')"
+                @click.stop="menuNav('toc')"
                 :disabled="adjacent.siblings.length <= 1"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.siblings.length > 1 ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -628,7 +676,8 @@ const adjacent = computed(() => {
               </button>
 
               <button
-                @click="showReadingMenu = false; adjacent.next && handleNavTo(adjacent.next)"
+                @touchend.stop.prevent="menuNav('next')"
+                @click.stop="menuNav('next')"
                 :disabled="!adjacent.next"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.next ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"

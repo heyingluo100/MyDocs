@@ -21,15 +21,15 @@ const articleStatus = reactive(loadStore(STORAGE_KEY))
 const collectionStatus = reactive(loadStore(COLLECTION_STORAGE_KEY))
 
 export function useReadStatus() {
-  const markAsRead = (slug) => {
-    articleStatus[slug] = new Date().toISOString()
+  const markAsRead = (slug, updatedAt) => {
+    articleStatus[slug] = updatedAt
     saveStore(STORAGE_KEY, articleStatus)
   }
 
   const isArticleRead = (slug, updatedAt) => {
-    const readAt = articleStatus[slug]
-    if (!readAt) return false
-    return readAt >= updatedAt
+    const savedUpdatedAt = articleStatus[slug]
+    if (!savedUpdatedAt) return false
+    return savedUpdatedAt === updatedAt
   }
 
   const markCollectionAsRead = (slug, articleCount) => {
@@ -44,20 +44,23 @@ export function useReadStatus() {
   }
 
   const getArticleDotType = (article) => {
-    const now = new Date()
-    const created = new Date(article.createdAt)
-    const daysSinceCreated = (now - created) / (1000 * 60 * 60 * 24)
+    const effectiveUpdatedAt = article.updatedAt || article.createdAt
 
-    // New article: created within N days and not read
-    if (daysSinceCreated <= NEW_ARTICLE_DAYS && !articleStatus[article.slug]) {
-      return 'new'
+    // Never read this article before
+    if (!articleStatus[article.slug]) {
+      const now = new Date()
+      const created = new Date(article.createdAt)
+      const daysSinceCreated = (now - created) / (1000 * 60 * 60 * 24)
+      // New article: created within N days
+      if (daysSinceCreated <= NEW_ARTICLE_DAYS) {
+        return 'new'
+      }
+      return null
     }
 
-    // Updated article: updatedAt !== createdAt and not read since update
-    if (article.updatedAt && article.updatedAt !== article.createdAt) {
-      if (!isArticleRead(article.slug, article.updatedAt)) {
-        return 'updated'
-      }
+    // Read before, but content has been updated since
+    if (articleStatus[article.slug] !== effectiveUpdatedAt) {
+      return 'updated'
     }
 
     return null
