@@ -66,31 +66,41 @@ const showReadingMenu = ref(false)
 const contentAreaRef = ref(null)
 
 let touchStartY = 0
+let touchStartX = 0
 let touchStartTime = 0
 let touchMoved = false
 
 const handleTouchStart = (e) => {
+  touchStartX = e.touches[0].clientX
   touchStartY = e.touches[0].clientY
   touchStartTime = Date.now()
   touchMoved = false
 }
 
-const handleTouchMove = () => {
-  touchMoved = true
+const handleTouchMove = (e) => {
+  // Only count as "moved" if finger travels more than 10px (tolerates slight jitter)
+  if (!touchMoved) {
+    const dx = e.touches[0].clientX - touchStartX
+    const dy = e.touches[0].clientY - touchStartY
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      touchMoved = true
+    }
+  }
 }
 
 const handleTouchEnd = (e) => {
-  // Ignore if scrolled or long press
-  if (touchMoved || Date.now() - touchStartTime > 300) return
+  // Ignore if scrolled or long press (500ms threshold)
+  if (touchMoved || Date.now() - touchStartTime > 500) return
   // Only on mobile (<1024px)
   if (window.innerWidth >= 1024) return
   // Ignore taps on interactive elements
   if (e.target.closest('a, button, input, [role="button"], form')) return
   const rect = contentAreaRef.value?.getBoundingClientRect()
   if (!rect) return
-  const y = touchStartY - rect.top
-  const fifth = rect.height / 5
-  if (y > fifth && y < fifth * 4) {
+  // Use viewport height — tap in middle 4/5 of screen triggers menu (exclude top/bottom 1/10)
+  const viewportHeight = window.innerHeight
+  const margin = viewportHeight / 10
+  if (touchStartY > margin && touchStartY < viewportHeight - margin) {
     e.preventDefault()
     showReadingMenu.value = !showReadingMenu.value
   }
