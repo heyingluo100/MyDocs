@@ -231,11 +231,13 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
     markAsRead(newSlug, current.content)
     markStatusRead(newSlug, current.updatedAt || current.createdAt)
 
-    // Check for saved reading position
-    const pos = getReadingPosition(newSlug)
-    if (pos) {
-      savedProgress.value = pos
-      showContinueDialog.value = true
+    // Check for saved reading position (only on SPA navigation, not page refresh)
+    if (!isInitialLoad) {
+      const pos = getReadingPosition(newSlug)
+      if (pos) {
+        savedProgress.value = pos
+        showContinueDialog.value = true
+      }
     }
   }
   isInitialLoad = false
