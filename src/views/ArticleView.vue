@@ -183,8 +183,11 @@ let isInitialLoad = true
 // Uses sessionStorage so it persists across page navigations
 const navContextTag = ref(sessionStorage.getItem('nav-context-tag') || '')
 
+// Helper: get a stable string key from content (works for both plain base64 and encrypted objects)
+const contentKey = (c) => typeof c === 'string' ? c : JSON.stringify(c)
+
 // Route change: freeze new article or detect history update
-watch(() => route.params.slug, (newSlug, oldSlug) => {
+watch(() => route.params.slug, async (newSlug, oldSlug) => {
   // Save position of previous article before switching
   if (oldSlug && readingProgress.value > 0) {
     saveReadingPosition(oldSlug, readingProgress.value)
@@ -205,20 +208,33 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
   const current = getArticleBySlug(newSlug)
   if (!current) return
 
-  // Check article lock
-  if (current.locked && current.lockHash) {
-    articleUnlocked.value = checkArticleAccess(newSlug, current.lockHash)
-    if (!articleUnlocked.value) {
-      // Still freeze the article metadata (for title display), but content stays locked
+  // Check article lock (encrypted content)
+  if (current.locked && current.encrypted) {
+    const result = await checkArticleAccess(newSlug, current.content)
+    if (!result.unlocked) {
+      articleUnlocked.value = false
       frozenArticle.value = { ...current }
-      frozenContent.value = current.content
       isInitialLoad = false
       return
     }
+    // Decrypted successfully — use decrypted content
+    frozenContent.value = result.content
+    frozenArticle.value = { ...current }
+    markAsRead(newSlug, result.content)
+    markStatusRead(newSlug, current.updatedAt || current.createdAt)
+    if (!isInitialLoad) {
+      const pos = getReadingPosition(newSlug)
+      if (pos) {
+        savedProgress.value = pos
+        showContinueDialog.value = true
+      }
+    }
+    isInitialLoad = false
+    return
   }
 
   // On SPA navigation (not page refresh), check history for updates
-  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, current.content)) {
+  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, contentKey(current.content))) {
     updateReason.value = 'history'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
@@ -228,7 +244,7 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
     // Page refresh, first visit, or no changes — show latest directly
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
-    markAsRead(newSlug, current.content)
+    markAsRead(newSlug, contentKey(current.content))
     markStatusRead(newSlug, current.updatedAt || current.createdAt)
 
     // Check for saved reading position (only on SPA navigation, not page refresh)
@@ -244,7 +260,7 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
 }, { immediate: true })
 
 // Realtime: watch articles array for HMR/live updates on CURRENT article
-watch(articles, () => {
+watch(articles, async () => {
   const slug = route.params.slug
   if (!slug) return
   const current = getArticleBySlug(slug)
@@ -267,22 +283,29 @@ watch(articles, () => {
   // First load: articles just arrived from fetch — always show latest (this is a page refresh)
   if (!frozenContent.value && !frozenArticle.value) {
     // Check article lock on first load too
-    if (current.locked && current.lockHash) {
-      articleUnlocked.value = checkArticleAccess(slug, current.lockHash)
-      if (!articleUnlocked.value) {
+    if (current.locked && current.encrypted) {
+      const result = await checkArticleAccess(slug, current.content)
+      if (!result.unlocked) {
+        articleUnlocked.value = false
         frozenArticle.value = { ...current }
-        frozenContent.value = current.content
         return
       }
+      frozenContent.value = result.content
+      frozenArticle.value = { ...current }
+      markAsRead(slug, result.content)
+      return
     }
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
-    markAsRead(slug, current.content)
+    markAsRead(slug, contentKey(current.content))
     return
   }
 
   // Realtime update: same article, content changed while viewing
-  if (frozenContent.value && current.content !== frozenContent.value) {
+  // For encrypted articles, compare the stringified encrypted object
+  const currentCK = contentKey(current.content)
+  const frozenCK = frozenContent.value
+  if (frozenContent.value && currentCK !== frozenCK) {
     updateReason.value = 'realtime'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
@@ -309,7 +332,7 @@ const handleRefreshNow = () => {
   if (latest) {
     frozenContent.value = latest.content
     frozenArticle.value = { ...latest }
-    markAsRead(latest.slug, latest.content)
+    markAsRead(latest.slug, contentKey(latest.content))
   }
   pendingArticle.value = null
 }
@@ -344,12 +367,14 @@ const handleStartFresh = () => {
 }
 
 // Article unlock: after entering correct code, initialize normal reading flow
-const handleArticleUnlocked = () => {
+const handleArticleUnlocked = (decryptedContent) => {
   articleUnlocked.value = true
   const slug = route.params.slug
   const current = getArticleBySlug(slug)
   if (current) {
-    markAsRead(slug, current.content)
+    frozenContent.value = decryptedContent
+    frozenArticle.value = { ...current }
+    markAsRead(slug, decryptedContent)
     markStatusRead(slug, current.updatedAt || current.createdAt)
     const pos = getReadingPosition(slug)
     if (pos) {
@@ -360,13 +385,16 @@ const handleArticleUnlocked = () => {
 }
 
 // Navigation: check lock before jumping
-const handleNavTo = (target) => {
-  if (target.locked && target.lockHash && !checkArticleAccess(target.slug, target.lockHash)) {
-    pendingNavTarget.value = target
-    showLockedNavDialog.value = true
-  } else {
-    router.replace(`/article/${target.slug}`)
+const handleNavTo = async (target) => {
+  if (target.locked && target.encrypted) {
+    const result = await checkArticleAccess(target.slug, target.content)
+    if (!result.unlocked) {
+      pendingNavTarget.value = target
+      showLockedNavDialog.value = true
+      return
+    }
   }
+  router.replace(`/article/${target.slug}`)
 }
 
 const handleNavConfirm = () => {
@@ -506,7 +534,7 @@ const adjacent = computed(() => {
     <ArticleLockOverlay
       v-if="displayArticle?.locked && !articleUnlocked"
       :title="displayArticle.title"
-      :lock-hash="displayArticle.lockHash"
+      :encrypted-content="displayArticle.content"
       :slug="displayArticle.slug"
       @unlocked="handleArticleUnlocked"
     />

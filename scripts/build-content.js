@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
+import crypto from 'crypto'
 import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
@@ -26,6 +27,20 @@ const WORD_EXTS = ['.docx']
 const DOC_EXTS = ['.doc']
 const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
+
+// AES-256-GCM encryption for locked articles
+function encryptContent(plainBase64, hashHex) {
+  const key = Buffer.from(hashHex, 'hex') // 32 bytes = AES-256
+  // Deterministic IV: derived from content hash so same content + same key = same ciphertext
+  const iv = crypto.createHash('md5').update(plainBase64).digest().subarray(0, 12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(plainBase64, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag() // 16 bytes
+  return {
+    iv: iv.toString('base64'),
+    ct: Buffer.concat([encrypted, tag]).toString('base64')
+  }
+}
 
 function getFileDates(filePath) {
   try {
@@ -430,9 +445,25 @@ async function buildArticles() {
   articles.forEach(a => a.tags.forEach(t => tagSet.add(t)))
   const allTags = [...tagSet]
 
+  // Encrypt locked articles: content becomes AES-256-GCM ciphertext, lockHash removed
+  let encryptedCount = 0
+  for (const article of articles) {
+    if (article.locked && article.lockHash) {
+      article.content = encryptContent(article.content, article.lockHash)
+      article.encrypted = true
+      delete article.lockHash
+      encryptedCount++
+    } else {
+      delete article.lockHash
+    }
+  }
+
   const output = { allTags, allCollections: collections, articles }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
+  if (encryptedCount > 0) {
+    console.log(`[build-content] 🔒 已加密 ${encryptedCount} 篇锁定文档（AES-256-GCM）`)
+  }
   if (filesCopied > 0) {
     console.log(`[build-content] 📎 复制了 ${filesCopied} 个附件文件到 public/files/`)
   }

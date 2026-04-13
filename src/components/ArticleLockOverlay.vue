@@ -4,7 +4,7 @@ import { useInvitation } from '../composables/useInvitation.js'
 
 const props = defineProps({
   title: { type: String, default: '' },
-  lockHash: { type: String, default: '' },
+  encryptedContent: { type: Object, default: () => ({}) },
   slug: { type: String, default: '' }
 })
 
@@ -22,11 +22,11 @@ const handleSubmit = async () => {
   loading.value = true
   error.value = false
 
-  const ok = await submitArticleCode(props.slug, code.value.trim(), props.lockHash)
+  const result = await submitArticleCode(props.slug, code.value.trim(), props.encryptedContent)
   loading.value = false
 
-  if (ok) {
-    emit('unlocked')
+  if (result.success) {
+    emit('unlocked', result.content)
   } else {
     error.value = true
     shaking.value = true
