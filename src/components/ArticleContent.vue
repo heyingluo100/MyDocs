@@ -100,8 +100,15 @@ onMounted(() => {
                    window.outerHeight - window.innerHeight > 160
       if (open && !wasOpen) {
         clearShadow()
+        // Completely collapse the host element — nothing to see, nothing to scrape
+        hostRef.value.style.visibility = 'hidden'
+        hostRef.value.style.height = '0'
+        hostRef.value.style.overflow = 'hidden'
       } else if (!open && wasOpen) {
         render()
+        hostRef.value.style.visibility = ''
+        hostRef.value.style.height = ''
+        hostRef.value.style.overflow = ''
       }
       wasOpen = open
     }, 800)
