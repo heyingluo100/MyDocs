@@ -541,7 +541,29 @@ const adjacent = computed(() => {
 
     <!-- Article content (protected) — hidden when locked -->
     <template v-if="articleUnlocked">
+      <!-- Author note (top position) -->
+      <div v-if="displayArticle.authorNote && displayArticle.authorNotePosition === 'top'" class="mb-8 rounded-xl bg-linear-bg-secondary border-l-4 border-linear-accent/60 px-5 py-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-linear-accent/70 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+          </svg>
+          <span class="text-xs font-medium text-linear-accent/70 tracking-wide uppercase">作者的话</span>
+        </div>
+        <div class="text-sm text-linear-text-secondary leading-relaxed article-body" v-html="displayArticle.authorNote"></div>
+      </div>
+
       <ArticleContent :html="htmlContent" />
+
+      <!-- Author note (bottom position) -->
+      <div v-if="displayArticle.authorNote && displayArticle.authorNotePosition === 'bottom'" class="mt-10 rounded-xl bg-linear-bg-secondary border-l-4 border-linear-accent/60 px-5 py-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-linear-accent/70 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+          </svg>
+          <span class="text-xs font-medium text-linear-accent/70 tracking-wide uppercase">作者的话</span>
+        </div>
+        <div class="text-sm text-linear-text-secondary leading-relaxed article-body" v-html="displayArticle.authorNote"></div>
+      </div>
 
     <!-- Attached files -->
     <div v-if="displayArticle && displayArticle.files && displayArticle.files.length" class="mt-10 pt-6 border-t border-linear-border/50">

@@ -228,6 +228,7 @@ async function buildArticles() {
     if (file === '.pin') return null
     if (ext === '.lock') return null
     if (ext === '.pin') return null
+    if (ext === '.note') return null
     if (file.endsWith('.tags')) return null
     if (fs.statSync(filePath).isDirectory()) return null
 
@@ -262,11 +263,30 @@ async function buildArticles() {
       }
     }
 
+    // Check for .note file (author's note)
+    const noteFilePath = path.join(path.dirname(filePath), baseName + '.note')
+    let authorNote = ''
+    let authorNotePosition = ''
+    if (fs.existsSync(noteFilePath)) {
+      const noteRaw = fs.readFileSync(noteFilePath, 'utf-8').trim()
+      if (noteRaw) {
+        const lines = noteRaw.split(/\r?\n/)
+        const firstLine = lines[0].trim().toLowerCase()
+        if (firstLine === 'top' || firstLine === 'bottom') {
+          authorNotePosition = firstLine
+          authorNote = md.render(lines.slice(1).join('\n').trim())
+        } else {
+          authorNotePosition = 'top'
+          authorNote = md.render(noteRaw)
+        }
+      }
+    }
+
     if (MARKDOWN_EXTS.includes(ext)) {
       try {
         const result = await processMarkdown(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -280,7 +300,7 @@ async function buildArticles() {
       try {
         const result = await processDocx(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -294,7 +314,7 @@ async function buildArticles() {
       try {
         const result = await processDoc(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -308,7 +328,7 @@ async function buildArticles() {
       try {
         const result = processText(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
           createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
@@ -323,7 +343,7 @@ async function buildArticles() {
       filesCopied++
       const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
       return {
-        slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag,
+        slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
