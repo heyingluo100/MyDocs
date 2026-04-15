@@ -1,36 +1,39 @@
-//如果你用的是私密仓库，这个文件可以直接删除。虽然不影响你的部署但是每次上传都会标红真的很难看。（之前的文件具体有啥我忘了，这边删掉了一些东西。等周一我改一下）
-
 name: Deploy to GitHub Pages
 
-on:                                                                          
-  push:                                                                
+on:
+  push:
     branches: [master]
 
-permissions:                                                                          
-  contents: read    
-  id-token: write                                                                
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-concurrency:                                                                          
-  group: pages    
-  cancel-in-progress: true                                                                
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
-jobs:                                                                          
-  build-and-deploy:                                                                
-    runs-on: ubuntu-latest    
-    environment:                                                                
-      name: github-pages    
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    steps:                                                                
+    steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
-        with:                                                                
-          node-version: 20    
-          cache: npm    
+        with:
+          node-version: 20
+          cache: npm
 
       - run: npm ci
 
       - run: npm run build
 
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
 
-       
+      - id: deployment
+        uses: actions/deploy-pages@v4
