@@ -7,7 +7,7 @@ import ArticleCard from '../components/ArticleCard.vue'
 import CollectionCard from '../components/CollectionCard.vue'
 
 const route = useRoute()
-const { getArticlesByTag, allCollections, sortBy } = useArticles()
+const { getArticlesByTag, allCollections, sortBy, sortOrder } = useArticles()
 const showMobileSheet = ref(false)
 const showSortMenu = ref(false)
 
@@ -16,6 +16,10 @@ const sortLabel = computed(() => sortBy.value === 'updated' ? '最近更新' : '
 const handleSort = (value) => {
   sortBy.value = value
   showSortMenu.value = false
+}
+
+const toggleOrder = () => {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
 }
 
 const currentTag = computed(() => {
@@ -86,7 +90,9 @@ const mixedItems = computed(() => {
       return aData.pinOrder - bData.pinOrder
     }
     // Non-pinned: by date
-    return b.sortDate.localeCompare(a.sortDate)
+    return sortOrder.value === 'asc'
+      ? a.sortDate.localeCompare(b.sortDate)
+      : b.sortDate.localeCompare(a.sortDate)
   })
 
   return items
@@ -108,6 +114,16 @@ const totalCount = computed(() => filteredArticles.value.length)
         </span>
 
         <div class="ml-auto flex items-center gap-2">
+          <!-- Sort order toggle -->
+          <button
+            class="flex items-center justify-center w-8 h-8 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
+            :title="sortOrder === 'desc' ? '降序' : '升序'"
+            @click="toggleOrder"
+          >
+            <svg class="w-4 h-4 transition-transform duration-300" :class="sortOrder === 'asc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+            </svg>
+          </button>
           <!-- Sort dropdown -->
           <div class="relative">
             <button

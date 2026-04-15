@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
@@ -7,8 +7,20 @@ import ArticleCard from '../components/ArticleCard.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { getArticlesByCollection, getCollectionBySlug } = useArticles()
+const { getArticlesByCollection, getCollectionBySlug, sortBy, sortOrder } = useArticles()
 const { markCollectionAsRead } = useReadStatus()
+const showSortMenu = ref(false)
+
+const sortLabel = computed(() => sortBy.value === 'updated' ? '最近更新' : '最新创建')
+
+const handleSort = (value) => {
+  sortBy.value = value
+  showSortMenu.value = false
+}
+
+const toggleOrder = () => {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+}
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -26,7 +38,7 @@ const collectionArticles = computed(() => {
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    return 0 // preserve original order (filename sort from build)
+    return 0
   })
 })
 
@@ -71,6 +83,59 @@ watch(collection, (col) => {
             {{ t }}
           </router-link>
           <span class="text-sm text-linear-text-secondary">{{ collection.count }} 篇</span>
+
+          <div class="ml-auto flex items-center gap-2">
+            <!-- Sort order toggle -->
+            <button
+              class="flex items-center justify-center w-8 h-8 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
+              :title="sortOrder === 'desc' ? '降序' : '升序'"
+              @click="toggleOrder"
+            >
+              <svg class="w-4 h-4 transition-transform duration-300" :class="sortOrder === 'asc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+              </svg>
+            </button>
+            <!-- Sort dropdown -->
+            <div class="relative">
+              <button
+                class="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border transition-all duration-300 bg-linear-bg-secondary text-linear-text-secondary border-linear-border hover:bg-linear-bg-tertiary"
+                @click="showSortMenu = !showSortMenu"
+              >
+                {{ sortLabel }}
+                <svg class="w-3.5 h-3.5 transition-transform duration-300" :class="showSortMenu ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <Transition name="sort-menu">
+                <div
+                  v-if="showSortMenu"
+                  class="absolute right-0 top-full mt-1.5 bg-linear-bg rounded-xl border border-linear-border/50 shadow-lg overflow-hidden z-30 min-w-[8rem]"
+                >
+                  <button
+                    class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary"
+                    :class="sortBy === 'created' ? 'text-linear-accent' : 'text-linear-text'"
+                    @click="handleSort('created')"
+                  >
+                    最新创建
+                    <svg v-if="sortBy === 'created'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary"
+                    :class="sortBy === 'updated' ? 'text-linear-accent' : 'text-linear-text'"
+                    @click="handleSort('updated')"
+                  >
+                    最近更新
+                    <svg v-if="sortBy === 'updated'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                </div>
+              </Transition>
+              <div v-if="showSortMenu" class="fixed inset-0 z-20" @click="showSortMenu = false"></div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -107,5 +172,16 @@ watch(collection, (col) => {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+.sort-menu-enter-active {
+  transition: all 0.2s ease;
+}
+.sort-menu-leave-active {
+  transition: all 0.15s ease;
+}
+.sort-menu-enter-from,
+.sort-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
 }
 </style>

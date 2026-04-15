@@ -186,8 +186,10 @@ async function buildArticles() {
     if (file === '.tags') return null
     if (file === '.lock') return null
     if (file === '.pin') return null
+    if (file === '.order') return null
     if (ext === '.lock') return null
     if (ext === '.pin') return null
+    if (ext === '.note') return null
     if (file.endsWith('.tags')) return null
     if (fs.statSync(filePath).isDirectory()) return null
 
@@ -330,7 +332,24 @@ async function buildArticles() {
       if (fs.statSync(filePath).isDirectory()) {
         const collectionName = file
         const colSlug = slugify(tag + '-' + collectionName) || collectionName
-        const subFiles = fs.readdirSync(filePath).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+
+        // Read .order file for custom sort order
+        const orderFilePath = path.join(filePath, '.order')
+        let orderMap = null
+        if (fs.existsSync(orderFilePath)) {
+          const lines = fs.readFileSync(orderFilePath, 'utf-8').split('\n').map(l => l.trim()).filter(Boolean)
+          orderMap = {}
+          lines.forEach((name, i) => { orderMap[name] = i })
+        }
+
+        const subFiles = fs.readdirSync(filePath).sort((a, b) => {
+          if (orderMap) {
+            const ai = orderMap[a] ?? 9999
+            const bi = orderMap[b] ?? 9999
+            if (ai !== bi) return ai - bi
+          }
+          return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' })
+        })
 
         // Read .tags file inside collection folder for extra tags
         const extraTags = readExtraTags(path.join(filePath, '.tags'))
@@ -362,6 +381,7 @@ async function buildArticles() {
         }
 
         let count = 0
+        let colOrder = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
           const article = await processFile(subFilePath, collectionTags, collectionName, colSlug)
@@ -371,6 +391,7 @@ async function buildArticles() {
               article.locked = true
               article.lockHash = colLockHash
             }
+            article.collectionOrder = colOrder++
             articles.push(article)
             count++
           }

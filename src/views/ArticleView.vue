@@ -42,7 +42,7 @@ onBeforeUnmount(() => {
 
 const route = useRoute()
 const router = useRouter()
-const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy } = useArticles()
+const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy, sortOrder } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
 const { checkArticleAccess } = useInvitation()
@@ -361,7 +361,7 @@ const adjacent = computed(() => {
     }
     const dateA = sortBy.value === 'updated' ? (a.updatedAt || a.createdAt) : a.createdAt
     const dateB = sortBy.value === 'updated' ? (b.updatedAt || b.createdAt) : b.createdAt
-    return dateB.localeCompare(dateA)
+    return sortOrder.value === 'asc' ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA)
   })
   const index = sorted.findIndex(a => a.slug === displayArticle.value.slug)
   return {
@@ -654,15 +654,26 @@ const adjacent = computed(() => {
               {{ displayArticle?.collection || displayArticle?.tags?.[0] || '目录' }}
             </h3>
             <div class="flex items-center gap-2">
-              <button
-                @click="sortBy = sortBy === 'created' ? 'updated' : 'created'"
-                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
-              >
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
-                </svg>
-                {{ sortBy === 'updated' ? '最近更新' : '最新创建' }}
-              </button>
+              <template v-if="!displayArticle?.collectionSlug">
+                <button
+                  @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                  class="flex items-center justify-center w-7 h-7 rounded-lg text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+                  :title="sortOrder === 'desc' ? '降序' : '升序'"
+                >
+                  <svg class="w-3.5 h-3.5 transition-transform duration-300" :class="sortOrder === 'asc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                  </svg>
+                </button>
+                <button
+                  @click="sortBy = sortBy === 'created' ? 'updated' : 'created'"
+                  class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
+                  </svg>
+                  {{ sortBy === 'updated' ? '最近更新' : '最新创建' }}
+                </button>
+              </template>
               <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
                 <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
