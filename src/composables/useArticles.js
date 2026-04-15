@@ -54,7 +54,9 @@ export function useArticles() {
   }
 
   const getArticlesByCollection = (collectionSlug) => {
-    return articles.value.filter(a => a.collectionSlug === collectionSlug)
+    return articles.value
+      .filter(a => a.collectionSlug === collectionSlug)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   }
 
   const getCollectionBySlug = (slug) => {
@@ -76,7 +78,9 @@ export function useArticles() {
 
     // If article is in a collection, navigate within the collection only
     if (article.collectionSlug) {
-      const siblings = articles.value.filter(a => a.collectionSlug === article.collectionSlug)
+      const siblings = articles.value
+        .filter(a => a.collectionSlug === article.collectionSlug)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       const index = siblings.findIndex(a => a.slug === slug)
       return {
         prev: index > 0 ? siblings[index - 1] : null,
