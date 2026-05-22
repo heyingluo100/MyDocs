@@ -21,15 +21,23 @@ const articleStatus = reactive(loadStore(STORAGE_KEY))
 const collectionStatus = reactive(loadStore(COLLECTION_STORAGE_KEY))
 
 export function useReadStatus() {
-  const markAsRead = (slug) => {
-    articleStatus[slug] = new Date().toISOString()
+  const markAsRead = (slug, updatedAt) => {
+    articleStatus[slug] = updatedAt
     saveStore(STORAGE_KEY, articleStatus)
   }
 
   const isArticleRead = (slug, updatedAt) => {
-    const readAt = articleStatus[slug]
-    if (!readAt) return false
-    return readAt >= updatedAt
+    const saved = articleStatus[slug]
+    if (!saved) return false
+    // New format: stored value is a date string like "2026-02-14"
+    if (saved === updatedAt) return true
+    // Old format: stored value is ISO timestamp like "2026-04-09T10:00:00.000Z"
+    // Extract date part and compare — user read it at that date, so if readDate >= updatedAt, it's read
+    if (saved.includes('T')) {
+      return saved.split('T')[0] >= updatedAt
+    }
+    // New format: plain date string comparison (e.g. "2026-04-07" >= "2026-02-14")
+    return saved >= updatedAt
   }
 
   const markCollectionAsRead = (slug, articleCount) => {
@@ -44,18 +52,28 @@ export function useReadStatus() {
   }
 
   const getArticleDotType = (article) => {
-    const now = new Date()
-    const created = new Date(article.createdAt)
-    const daysSinceCreated = (now - created) / (1000 * 60 * 60 * 24)
+    // baseline = 加入时间（addedAt），旧数据无 addedAt 时回退到 createdAt
+    const baseline = article.addedAt || article.createdAt
+    const effectiveUpdatedAt = article.updatedAt || baseline
 
-    // New article: created within N days and not read
-    if (daysSinceCreated <= NEW_ARTICLE_DAYS && !articleStatus[article.slug]) {
-      return 'new'
+    // Never read this article before
+    if (!articleStatus[article.slug]) {
+      const now = new Date()
+      const created = new Date(baseline)
+      const daysSinceCreated = (now - created) / (1000 * 60 * 60 * 24)
+      // New article: created within N days
+      if (daysSinceCreated <= NEW_ARTICLE_DAYS) {
+        return 'new'
+      }
+      return null
     }
 
-    // Updated article: updatedAt !== createdAt and not read since update
-    if (article.updatedAt && article.updatedAt !== article.createdAt) {
-      if (!isArticleRead(article.slug, article.updatedAt)) {
+    // Read before, but content has been updated since — only alert within N days
+    if (!isArticleRead(article.slug, effectiveUpdatedAt)) {
+      const now = new Date()
+      const updated = new Date(effectiveUpdatedAt)
+      const daysSinceUpdated = (now - updated) / (1000 * 60 * 60 * 24)
+      if (daysSinceUpdated <= NEW_ARTICLE_DAYS) {
         return 'updated'
       }
     }

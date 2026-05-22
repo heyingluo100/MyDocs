@@ -154,7 +154,7 @@ watch(() => route.fullPath, () => {
                   </svg>
                   <div class="min-w-0 flex-1">
                     <p class="text-sm text-linear-text truncate">{{ item.article.title }}</p>
-                    <p class="text-xs text-linear-text-secondary/50">{{ item.article.tags?.[0] }} · {{ item.article.createdAt }}</p>
+                    <p class="text-xs text-linear-text-secondary/50">{{ item.article.tags?.[0] }} · {{ item.article.addedAt || item.article.createdAt }}</p>
                   </div>
                 </router-link>
               </template>
@@ -234,7 +234,7 @@ watch(() => route.fullPath, () => {
                   </svg>
                   <div class="min-w-0 flex-1">
                     <p class="text-sm text-linear-text truncate">{{ item.article.title }}</p>
-                    <p class="text-xs text-linear-text-secondary/50">{{ item.article.tags?.[0] }} · {{ item.article.createdAt }}</p>
+                    <p class="text-xs text-linear-text-secondary/50">{{ item.article.tags?.[0] }} · {{ item.article.addedAt || item.article.createdAt }}</p>
                   </div>
                 </router-link>
               </template>

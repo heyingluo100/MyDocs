@@ -15,6 +15,17 @@ const { checkArticleAccess } = useInvitation()
 const dotType = computed(() => getArticleDotType(props.article))
 const isUnlocked = computed(() => props.article.locked && checkArticleAccess(props.article.slug, props.article.lockHash))
 
+// 主时间：加入时间（旧数据无 addedAt 时回退到 createdAt 保持兼容）
+const primaryDate = computed(() => props.article.addedAt || props.article.createdAt || '')
+// 创作时间：仅当与主时间不同时才展示
+const showOriginalCreated = computed(() =>
+  props.article.createdAt && props.article.createdAt !== primaryDate.value
+)
+// 更新时间：仅当与主时间不同时才展示
+const showUpdated = computed(() =>
+  props.article.updatedAt && props.article.updatedAt !== primaryDate.value
+)
+
 const handleCollectionClick = (e, collectionSlug) => {
   e.preventDefault()
   e.stopPropagation()
@@ -67,10 +78,13 @@ const handleCollectionClick = (e, collectionSlug) => {
     </p>
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span v-if="article.createdAt" class="text-xs text-linear-text-secondary/60">
-          {{ article.createdAt }}
+        <span v-if="primaryDate" class="text-xs text-linear-text-secondary/60">
+          {{ primaryDate }}
         </span>
-        <span v-if="article.updatedAt && article.updatedAt !== article.createdAt" class="text-xs text-linear-text-secondary/40">
+        <span v-if="showOriginalCreated" class="text-xs text-linear-text-secondary/40">
+          · 创作于 {{ article.createdAt }}
+        </span>
+        <span v-if="showUpdated" class="text-xs text-linear-text-secondary/40">
           · 更新于 {{ article.updatedAt }}
         </span>
         <span v-if="article.wordCount" class="text-xs text-linear-text-secondary/40">

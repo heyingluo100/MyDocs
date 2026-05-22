@@ -5,8 +5,7 @@ const articles = ref([])
 const tagNames = ref([])
 const collectionList = ref([])
 const loaded = ref(false)
-const sortBy = ref('created')
-const sortOrder = ref('desc')
+const sortBy = ref('added')
 
 function updateData(newData) {
   articles.value = newData.articles || []
@@ -55,9 +54,7 @@ export function useArticles() {
   }
 
   const getArticlesByCollection = (collectionSlug) => {
-    return articles.value
-      .filter(a => a.collectionSlug === collectionSlug)
-      .sort((a, b) => (a.collectionOrder ?? 0) - (b.collectionOrder ?? 0))
+    return articles.value.filter(a => a.collectionSlug === collectionSlug)
   }
 
   const getCollectionBySlug = (slug) => {
@@ -79,9 +76,7 @@ export function useArticles() {
 
     // If article is in a collection, navigate within the collection only
     if (article.collectionSlug) {
-      const siblings = articles.value
-        .filter(a => a.collectionSlug === article.collectionSlug)
-        .sort((a, b) => (a.collectionOrder ?? 0) - (b.collectionOrder ?? 0))
+      const siblings = articles.value.filter(a => a.collectionSlug === article.collectionSlug)
       const index = siblings.findIndex(a => a.slug === slug)
       return {
         prev: index > 0 ? siblings[index - 1] : null,
@@ -109,7 +104,6 @@ export function useArticles() {
     allCollections,
     loaded,
     sortBy,
-    sortOrder,
     getArticlesByTag,
     getArticleBySlug,
     getArticlesByCollection,

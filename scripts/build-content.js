@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
+import crypto from 'crypto'
 import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
@@ -26,31 +28,62 @@ const DOC_EXTS = ['.doc']
 const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
+// AES-256-GCM encryption for locked articles
+function encryptContent(plainBase64, hashHex) {
+  const key = Buffer.from(hashHex, 'hex') // 32 bytes = AES-256
+  // Deterministic IV: derived from content hash so same content + same key = same ciphertext
+  const iv = crypto.createHash('md5').update(plainBase64).digest().subarray(0, 12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(plainBase64, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag() // 16 bytes
+  return {
+    iv: iv.toString('base64'),
+    ct: Buffer.concat([encrypted, tag]).toString('base64')
+  }
+}
+
+// addedAt = 文件加入本站的日期（git 首次提交日，沿用旧 createdAt 逻辑保证旧文章时间不丢）
+// updatedAt = 文件最近更新日期
+// createdAt = 文档真实创作日期（仅 docx 从元数据取，其他格式留空）
 function getFileDates(filePath) {
+  try {
+    const relPath = path.relative(root, filePath).replace(/\\/g, '/')
+    const gitAdded = execSync(
+      `git log --diff-filter=A --follow --format=%aI -- "${relPath}"`,
+      { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim().split('\n').pop()
+    const gitUpdated = execSync(
+      `git log -1 --format=%aI -- "${relPath}"`,
+      { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim()
+
+    if (gitAdded && gitUpdated) {
+      return {
+        addedAt: gitAdded.split('T')[0],
+        updatedAt: gitUpdated.split('T')[0]
+      }
+    }
+  } catch {
+    // git not available or file not tracked — fall through
+  }
   const stat = fs.statSync(filePath)
   return {
-    createdAt: stat.birthtime.toISOString().split('T')[0],
+    addedAt: stat.birthtime.toISOString().split('T')[0],
     updatedAt: stat.mtime.toISOString().split('T')[0]
   }
 }
 
-async function getDocxDates(filePath) {
+// 提取 docx 的真实创作日期；取不到返回空字符串（不 fallback 到 git 日期）
+async function getDocxOriginalCreatedAt(filePath) {
   try {
     const buffer = fs.readFileSync(filePath)
     const zip = await JSZip.loadAsync(buffer)
     const coreXml = await zip.file('docProps/core.xml')?.async('text')
-    if (!coreXml) return getFileDates(filePath)
-
+    if (!coreXml) return ''
     const createdMatch = coreXml.match(/<dcterms:created[^>]*>([^<]+)</)
-    const modifiedMatch = coreXml.match(/<dcterms:modified[^>]*>([^<]+)</)
-
-    const fsDates = getFileDates(filePath)
-    return {
-      createdAt: createdMatch ? createdMatch[1].split('T')[0] : fsDates.createdAt,
-      updatedAt: modifiedMatch ? modifiedMatch[1].split('T')[0] : fsDates.updatedAt
-    }
+    return createdMatch ? createdMatch[1].split('T')[0] : ''
   } catch {
-    return getFileDates(filePath)
+    return ''
   }
 }
 
@@ -80,6 +113,7 @@ async function processMarkdown(filePath) {
     title: frontmatter.title || path.basename(filePath, path.extname(filePath)),
     summary: frontmatter.summary || '',
     ...getFileDates(filePath),
+    createdAt: '',
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -105,12 +139,14 @@ async function processDocx(filePath) {
   const title = path.basename(filePath, '.docx')
   const plainText = htmlContent.replace(/<[^>]+>/g, '')
   const summary = plainText.substring(0, 100).trim()
-  const dates = await getDocxDates(filePath)
+  const fileDates = getFileDates(filePath)
+  const originalCreatedAt = await getDocxOriginalCreatedAt(filePath)
 
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    ...dates,
+    ...fileDates,
+    createdAt: originalCreatedAt,
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -132,6 +168,7 @@ async function processDoc(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...getFileDates(filePath),
+    createdAt: '',
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -150,6 +187,7 @@ function processText(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...getFileDates(filePath),
+    createdAt: '',
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -186,7 +224,6 @@ async function buildArticles() {
     if (file === '.tags') return null
     if (file === '.lock') return null
     if (file === '.pin') return null
-    if (file === '.order') return null
     if (ext === '.lock') return null
     if (ext === '.pin') return null
     if (ext === '.note') return null
@@ -224,13 +261,32 @@ async function buildArticles() {
       }
     }
 
+    // Check for .note file (author's note)
+    const noteFilePath = path.join(path.dirname(filePath), baseName + '.note')
+    let authorNote = ''
+    let authorNotePosition = ''
+    if (fs.existsSync(noteFilePath)) {
+      const noteRaw = fs.readFileSync(noteFilePath, 'utf-8').trim()
+      if (noteRaw) {
+        const lines = noteRaw.split(/\r?\n/)
+        const firstLine = lines[0].trim().toLowerCase()
+        if (firstLine === 'top' || firstLine === 'bottom') {
+          authorNotePosition = firstLine
+          authorNote = md.render(lines.slice(1).join('\n').trim())
+        } else {
+          authorNotePosition = 'top'
+          authorNote = md.render(noteRaw)
+        }
+      }
+    }
+
     if (MARKDOWN_EXTS.includes(ext)) {
       try {
         const result = await processMarkdown(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
-          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          addedAt: result.addedAt, createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
           wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
@@ -242,9 +298,9 @@ async function buildArticles() {
       try {
         const result = await processDocx(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
-          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          addedAt: result.addedAt, createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
           wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
@@ -256,9 +312,9 @@ async function buildArticles() {
       try {
         const result = await processDoc(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
-          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          addedAt: result.addedAt, createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
           wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
@@ -270,9 +326,9 @@ async function buildArticles() {
       try {
         const result = processText(filePath)
         return {
-          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag,
+          slug, title: result.title, tags, locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
           collection: collection || null, collectionSlug: collectionSlug || null,
-          createdAt: result.createdAt, updatedAt: result.updatedAt,
+          addedAt: result.addedAt, createdAt: result.createdAt, updatedAt: result.updatedAt,
           summary: result.summary, files: [],
           wordCount: countWords(result.content),
           content: Buffer.from(result.content).toString('base64')
@@ -285,9 +341,10 @@ async function buildArticles() {
       filesCopied++
       const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
       return {
-        slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag,
+        slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
         collection: collection || null, collectionSlug: collectionSlug || null,
         ...getFileDates(filePath),
+        createdAt: '',
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
         files: [file],
         wordCount: countWords(otherContent),
@@ -332,24 +389,7 @@ async function buildArticles() {
       if (fs.statSync(filePath).isDirectory()) {
         const collectionName = file
         const colSlug = slugify(tag + '-' + collectionName) || collectionName
-
-        // Read .order file for custom sort order
-        const orderFilePath = path.join(filePath, '.order')
-        let orderMap = null
-        if (fs.existsSync(orderFilePath)) {
-          const lines = fs.readFileSync(orderFilePath, 'utf-8').split('\n').map(l => l.trim()).filter(Boolean)
-          orderMap = {}
-          lines.forEach((name, i) => { orderMap[name] = i })
-        }
-
-        const subFiles = fs.readdirSync(filePath).sort((a, b) => {
-          if (orderMap) {
-            const ai = orderMap[a] ?? 9999
-            const bi = orderMap[b] ?? 9999
-            if (ai !== bi) return ai - bi
-          }
-          return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' })
-        })
+        const subFiles = fs.readdirSync(filePath).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
         // Read .tags file inside collection folder for extra tags
         const extraTags = readExtraTags(path.join(filePath, '.tags'))
@@ -381,7 +421,6 @@ async function buildArticles() {
         }
 
         let count = 0
-        let colOrder = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
           const article = await processFile(subFilePath, collectionTags, collectionName, colSlug)
@@ -391,7 +430,6 @@ async function buildArticles() {
               article.locked = true
               article.lockHash = colLockHash
             }
-            article.collectionOrder = colOrder++
             articles.push(article)
             count++
           }
@@ -418,17 +456,33 @@ async function buildArticles() {
     }
   }
 
-  // Sort by creation date (newest first)
-  articles.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  // Sort by added date (newest first)
+  articles.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))
 
   // Collect all tag names (including empty folders + extra tags from .tags files)
   const tagSet = new Set(tagFolders.map(f => f.name))
   articles.forEach(a => a.tags.forEach(t => tagSet.add(t)))
   const allTags = [...tagSet]
 
+  // Encrypt locked articles: content becomes AES-256-GCM ciphertext, lockHash removed
+  let encryptedCount = 0
+  for (const article of articles) {
+    if (article.locked && article.lockHash) {
+      article.content = encryptContent(article.content, article.lockHash)
+      article.encrypted = true
+      delete article.lockHash
+      encryptedCount++
+    } else {
+      delete article.lockHash
+    }
+  }
+
   const output = { allTags, allCollections: collections, articles }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
+  if (encryptedCount > 0) {
+    console.log(`[build-content] 🔒 已加密 ${encryptedCount} 篇锁定文档（AES-256-GCM）`)
+  }
   if (filesCopied > 0) {
     console.log(`[build-content] 📎 复制了 ${filesCopied} 个附件文件到 public/files/`)
   }

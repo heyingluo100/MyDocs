@@ -13,6 +13,41 @@ const { checkArticleAccess } = useInvitation()
 
 const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
 const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
+
+// Earliest addedAt among all articles in collection
+const addedAt = computed(() => {
+  if (!props.articles.length) return ''
+  const dates = props.articles.map(a => a.addedAt || a.createdAt || '').filter(Boolean)
+  if (!dates.length) return ''
+  return dates.reduce((min, d) => d < min ? d : min)
+})
+
+// 合集创作时间：取所有"createdAt 与 addedAt 不同"的文章里最早的那个
+// （createdAt 仅 docx 从元数据取得真实创作日期，其他格式留空；与 addedAt 相同视为没有创作时间信息）
+const originalCreatedAt = computed(() => {
+  if (!props.articles.length) return ''
+  const dates = props.articles
+    .filter(a => a.createdAt && a.createdAt !== a.addedAt)
+    .map(a => a.createdAt)
+  if (!dates.length) return ''
+  return dates.reduce((min, d) => d < min ? d : min)
+})
+
+// Latest updatedAt among all articles in collection
+const updatedAt = computed(() => {
+  if (!props.articles.length) return ''
+  const dates = props.articles.map(a => a.updatedAt || a.addedAt || a.createdAt || '').filter(Boolean)
+  if (!dates.length) return ''
+  return dates.reduce((max, d) => d > max ? d : max)
+})
+
+const showOriginalCreated = computed(() => originalCreatedAt.value && originalCreatedAt.value !== addedAt.value)
+const showUpdated = computed(() => updatedAt.value && updatedAt.value !== addedAt.value)
+
+// Total word count of all articles
+const totalWords = computed(() => {
+  return props.articles.reduce((sum, a) => sum + (a.wordCount || 0), 0)
+})
 const allLocked = computed(() => props.articles.length > 0 && props.articles.every(a => a.locked))
 const allUnlocked = computed(() => allLocked.value && props.articles.every(a => checkArticleAccess(a.slug, a.lockHash)))
 </script>
@@ -20,14 +55,14 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
 <template>
   <router-link
     :to="`/collection/${encodeURIComponent(collection.slug)}`"
-    class="block relative group pb-3 pr-3"
+    class="flex flex-col relative group pb-3 pr-3"
   >
     <!-- Stacked layers behind -->
     <div class="absolute inset-0 bg-linear-bg-tertiary/60 rounded-2xl border border-linear-border/30 translate-x-1.5 translate-y-1.5"></div>
     <div class="absolute inset-0 bg-linear-bg-tertiary/40 rounded-2xl border border-linear-border/20 translate-x-3 translate-y-3"></div>
 
     <!-- Main card -->
-    <div class="relative bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
+    <div class="relative flex-1 bg-linear-bg-secondary rounded-2xl border border-linear-border/50 p-5 hover:bg-linear-bg-tertiary hover:-translate-y-0.5 transition-[background-color,transform] duration-300">
       <!-- Status dot -->
       <span
         v-if="dotType"
@@ -64,9 +99,24 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
         </svg>
       </div>
 
-      <p v-if="latestTitle" class="text-sm text-linear-text-secondary line-clamp-1">
+      <p v-if="latestTitle" class="text-sm text-linear-text-secondary line-clamp-1 mb-3">
         最新：{{ latestTitle }}
       </p>
+
+      <div class="flex items-center gap-2">
+        <span v-if="addedAt" class="text-xs text-linear-text-secondary/60">
+          {{ addedAt }}
+        </span>
+        <span v-if="showOriginalCreated" class="text-xs text-linear-text-secondary/40">
+          · 创作于 {{ originalCreatedAt }}
+        </span>
+        <span v-if="showUpdated" class="text-xs text-linear-text-secondary/40">
+          · 更新于 {{ updatedAt }}
+        </span>
+        <span v-if="totalWords" class="text-xs text-linear-text-secondary/40">
+          · {{ totalWords >= 10000 ? (totalWords / 10000).toFixed(1) + '万' : totalWords }} 字
+        </span>
+      </div>
     </div>
   </router-link>
 </template>

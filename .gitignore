@@ -4,3 +4,4 @@ dist/
 *.local
 public/files/
 content/
+.content-cache/

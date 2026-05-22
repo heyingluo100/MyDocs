@@ -6,6 +6,7 @@ import { useReadHistory } from '../composables/useReadHistory.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
 import { useReadingPrefs } from '../composables/useReadingPrefs.js'
 import { useInvitation } from '../composables/useInvitation.js'
+import { useTheme } from '../composables/useTheme.js'
 import ArticleContent from '../components/ArticleContent.vue'
 import ArticleLockOverlay from '../components/ArticleLockOverlay.vue'
 
@@ -42,7 +43,7 @@ onBeforeUnmount(() => {
 
 const route = useRoute()
 const router = useRouter()
-const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy, sortOrder } = useArticles()
+const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
 const { checkArticleAccess } = useInvitation()
@@ -62,35 +63,64 @@ const deletedTitle = ref('')
 
 // Mobile reading overlay menu
 const { FONT_SIZES, currentSize } = useReadingPrefs()
+const { theme, toggleTheme } = useTheme()
 const showReadingMenu = ref(false)
 const contentAreaRef = ref(null)
+const bottomNavRef = ref(null)
+const bottomNavVisible = ref(false)
+
+// Track whether the static bottom nav is visible in viewport
+let bottomNavObserver = null
+onMounted(() => {
+  bottomNavObserver = new IntersectionObserver(([entry]) => {
+    bottomNavVisible.value = entry.isIntersecting
+  }, { threshold: 0.1 })
+})
+watch(bottomNavRef, (el) => {
+  if (el && bottomNavObserver) bottomNavObserver.observe(el)
+}, { immediate: true })
+onBeforeUnmount(() => {
+  bottomNavObserver?.disconnect()
+})
 
 let touchStartY = 0
+let touchStartX = 0
 let touchStartTime = 0
 let touchMoved = false
 
 const handleTouchStart = (e) => {
+  touchStartX = e.touches[0].clientX
   touchStartY = e.touches[0].clientY
   touchStartTime = Date.now()
   touchMoved = false
 }
 
-const handleTouchMove = () => {
-  touchMoved = true
+const handleTouchMove = (e) => {
+  // Only count as "moved" if finger travels more than 10px (tolerates slight jitter)
+  if (!touchMoved) {
+    const dx = e.touches[0].clientX - touchStartX
+    const dy = e.touches[0].clientY - touchStartY
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      touchMoved = true
+    }
+  }
 }
 
 const handleTouchEnd = (e) => {
-  // Ignore if scrolled or long press
-  if (touchMoved || Date.now() - touchStartTime > 300) return
+  // Ignore if scrolled or long press (500ms threshold)
+  if (touchMoved || Date.now() - touchStartTime > 500) return
   // Only on mobile (<1024px)
   if (window.innerWidth >= 1024) return
   // Ignore taps on interactive elements
   if (e.target.closest('a, button, input, [role="button"], form')) return
+  // Don't show floating menu when static bottom nav is already visible
+  if (bottomNavVisible.value) return
   const rect = contentAreaRef.value?.getBoundingClientRect()
   if (!rect) return
-  const y = touchStartY - rect.top
-  const fifth = rect.height / 5
-  if (y > fifth && y < fifth * 4) {
+  // Use viewport height — tap in middle 4/5 of screen triggers menu (exclude top/bottom 1/10)
+  const viewportHeight = window.innerHeight
+  const margin = viewportHeight / 10
+  if (touchStartY > margin && touchStartY < viewportHeight - margin) {
     e.preventDefault()
     showReadingMenu.value = !showReadingMenu.value
   }
@@ -99,6 +129,20 @@ const handleTouchEnd = (e) => {
 const handleContentTap = (e) => {
   // Desktop fallback only (mobile uses touchend)
   if (window.innerWidth < 1024) return
+}
+
+// Floating menu nav: close menu first, then act on nextTick to avoid animation interference
+let menuNavFired = false
+const menuNav = (action) => {
+  if (menuNavFired) return
+  menuNavFired = true
+  showReadingMenu.value = false
+  nextTick(() => {
+    menuNavFired = false
+    if (action === 'prev' && adjacent.value.prev) handleNavTo(adjacent.value.prev)
+    else if (action === 'next' && adjacent.value.next) handleNavTo(adjacent.value.next)
+    else if (action === 'toc') showTocDialog.value = true
+  })
 }
 
 watch(showReadingMenu, (val) => {
@@ -139,8 +183,11 @@ let isInitialLoad = true
 // Uses sessionStorage so it persists across page navigations
 const navContextTag = ref(sessionStorage.getItem('nav-context-tag') || '')
 
+// Helper: get a stable string key from content (works for both plain base64 and encrypted objects)
+const contentKey = (c) => typeof c === 'string' ? c : JSON.stringify(c)
+
 // Route change: freeze new article or detect history update
-watch(() => route.params.slug, (newSlug, oldSlug) => {
+watch(() => route.params.slug, async (newSlug, oldSlug) => {
   // Save position of previous article before switching
   if (oldSlug && readingProgress.value > 0) {
     saveReadingPosition(oldSlug, readingProgress.value)
@@ -161,20 +208,33 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
   const current = getArticleBySlug(newSlug)
   if (!current) return
 
-  // Check article lock
-  if (current.locked && current.lockHash) {
-    articleUnlocked.value = checkArticleAccess(newSlug, current.lockHash)
-    if (!articleUnlocked.value) {
-      // Still freeze the article metadata (for title display), but content stays locked
+  // Check article lock (encrypted content)
+  if (current.locked && current.encrypted) {
+    const result = await checkArticleAccess(newSlug, current.content)
+    if (!result.unlocked) {
+      articleUnlocked.value = false
       frozenArticle.value = { ...current }
-      frozenContent.value = current.content
       isInitialLoad = false
       return
     }
+    // Decrypted successfully — use decrypted content
+    frozenContent.value = result.content
+    frozenArticle.value = { ...current }
+    markAsRead(newSlug, result.content)
+    markStatusRead(newSlug, current.updatedAt || current.addedAt || current.createdAt)
+    if (!isInitialLoad) {
+      const pos = getReadingPosition(newSlug)
+      if (pos) {
+        savedProgress.value = pos
+        showContinueDialog.value = true
+      }
+    }
+    isInitialLoad = false
+    return
   }
 
   // On SPA navigation (not page refresh), check history for updates
-  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, current.content)) {
+  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, contentKey(current.content))) {
     updateReason.value = 'history'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
@@ -184,21 +244,23 @@ watch(() => route.params.slug, (newSlug, oldSlug) => {
     // Page refresh, first visit, or no changes — show latest directly
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
-    markAsRead(newSlug, current.content)
-    markStatusRead(newSlug)
+    markAsRead(newSlug, contentKey(current.content))
+    markStatusRead(newSlug, current.updatedAt || current.addedAt || current.createdAt)
 
-    // Check for saved reading position
-    const pos = getReadingPosition(newSlug)
-    if (pos) {
-      savedProgress.value = pos
-      showContinueDialog.value = true
+    // Check for saved reading position (only on SPA navigation, not page refresh)
+    if (!isInitialLoad) {
+      const pos = getReadingPosition(newSlug)
+      if (pos) {
+        savedProgress.value = pos
+        showContinueDialog.value = true
+      }
     }
   }
   isInitialLoad = false
 }, { immediate: true })
 
 // Realtime: watch articles array for HMR/live updates on CURRENT article
-watch(articles, () => {
+watch(articles, async () => {
   const slug = route.params.slug
   if (!slug) return
   const current = getArticleBySlug(slug)
@@ -221,22 +283,29 @@ watch(articles, () => {
   // First load: articles just arrived from fetch — always show latest (this is a page refresh)
   if (!frozenContent.value && !frozenArticle.value) {
     // Check article lock on first load too
-    if (current.locked && current.lockHash) {
-      articleUnlocked.value = checkArticleAccess(slug, current.lockHash)
-      if (!articleUnlocked.value) {
+    if (current.locked && current.encrypted) {
+      const result = await checkArticleAccess(slug, current.content)
+      if (!result.unlocked) {
+        articleUnlocked.value = false
         frozenArticle.value = { ...current }
-        frozenContent.value = current.content
         return
       }
+      frozenContent.value = result.content
+      frozenArticle.value = { ...current }
+      markAsRead(slug, result.content)
+      return
     }
     frozenContent.value = current.content
     frozenArticle.value = { ...current }
-    markAsRead(slug, current.content)
+    markAsRead(slug, contentKey(current.content))
     return
   }
 
   // Realtime update: same article, content changed while viewing
-  if (frozenContent.value && current.content !== frozenContent.value) {
+  // For encrypted articles, compare the stringified encrypted object
+  const currentCK = contentKey(current.content)
+  const frozenCK = frozenContent.value
+  if (frozenContent.value && currentCK !== frozenCK) {
     updateReason.value = 'realtime'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
@@ -263,7 +332,7 @@ const handleRefreshNow = () => {
   if (latest) {
     frozenContent.value = latest.content
     frozenArticle.value = { ...latest }
-    markAsRead(latest.slug, latest.content)
+    markAsRead(latest.slug, contentKey(latest.content))
   }
   pendingArticle.value = null
 }
@@ -298,13 +367,15 @@ const handleStartFresh = () => {
 }
 
 // Article unlock: after entering correct code, initialize normal reading flow
-const handleArticleUnlocked = () => {
+const handleArticleUnlocked = (decryptedContent) => {
   articleUnlocked.value = true
   const slug = route.params.slug
   const current = getArticleBySlug(slug)
   if (current) {
-    markAsRead(slug, current.content)
-    markStatusRead(slug)
+    frozenContent.value = decryptedContent
+    frozenArticle.value = { ...current }
+    markAsRead(slug, decryptedContent)
+    markStatusRead(slug, current.updatedAt || current.addedAt || current.createdAt)
     const pos = getReadingPosition(slug)
     if (pos) {
       savedProgress.value = pos
@@ -314,13 +385,16 @@ const handleArticleUnlocked = () => {
 }
 
 // Navigation: check lock before jumping
-const handleNavTo = (target) => {
-  if (target.locked && target.lockHash && !checkArticleAccess(target.slug, target.lockHash)) {
-    pendingNavTarget.value = target
-    showLockedNavDialog.value = true
-  } else {
-    router.replace(`/article/${target.slug}`)
+const handleNavTo = async (target) => {
+  if (target.locked && target.encrypted) {
+    const result = await checkArticleAccess(target.slug, target.content)
+    if (!result.unlocked) {
+      pendingNavTarget.value = target
+      showLockedNavDialog.value = true
+      return
+    }
   }
+  router.replace(`/article/${target.slug}`)
 }
 
 const handleNavConfirm = () => {
@@ -359,9 +433,13 @@ const adjacent = computed(() => {
       if (!aGlobalPin && bGlobalPin) return 1
       return a.pinOrder - b.pinOrder
     }
-    const dateA = sortBy.value === 'updated' ? (a.updatedAt || a.createdAt) : a.createdAt
-    const dateB = sortBy.value === 'updated' ? (b.updatedAt || b.createdAt) : b.createdAt
-    return sortOrder.value === 'asc' ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA)
+    const dateA = sortBy.value === 'updated'
+      ? (a.updatedAt || a.addedAt || a.createdAt || '')
+      : (a.addedAt || a.createdAt || '')
+    const dateB = sortBy.value === 'updated'
+      ? (b.updatedAt || b.addedAt || b.createdAt || '')
+      : (b.addedAt || b.createdAt || '')
+    return dateB.localeCompare(dateA)
   })
   const index = sorted.findIndex(a => a.slug === displayArticle.value.slug)
   return {
@@ -430,10 +508,13 @@ const adjacent = computed(() => {
     <header ref="headerRef" v-if="displayArticle" class="mb-8">
       <h1 class="text-2xl font-bold text-linear-text mb-3">{{ displayArticle.title }}</h1>
       <div class="flex items-center gap-3 flex-wrap">
-        <span v-if="displayArticle.createdAt" class="text-sm text-linear-text-secondary">
-          创建于 {{ displayArticle.createdAt }}
+        <span v-if="displayArticle.addedAt" class="text-sm text-linear-text-secondary">
+          加入于 {{ displayArticle.addedAt }}
         </span>
-        <span v-if="displayArticle.updatedAt && displayArticle.updatedAt !== displayArticle.createdAt" class="text-sm text-linear-text-secondary">
+        <span v-if="displayArticle.createdAt && displayArticle.createdAt !== displayArticle.addedAt" class="text-sm text-linear-text-secondary">
+          · 创作于 {{ displayArticle.createdAt }}
+        </span>
+        <span v-if="displayArticle.updatedAt && displayArticle.updatedAt !== displayArticle.addedAt" class="text-sm text-linear-text-secondary">
           · 更新于 {{ displayArticle.updatedAt }}
         </span>
         <span v-if="displayArticle.wordCount" class="text-sm text-linear-text-secondary">
@@ -460,14 +541,36 @@ const adjacent = computed(() => {
     <ArticleLockOverlay
       v-if="displayArticle?.locked && !articleUnlocked"
       :title="displayArticle.title"
-      :lock-hash="displayArticle.lockHash"
+      :encrypted-content="displayArticle.content"
       :slug="displayArticle.slug"
       @unlocked="handleArticleUnlocked"
     />
 
     <!-- Article content (protected) — hidden when locked -->
     <template v-if="articleUnlocked">
+      <!-- Author note (top position) -->
+      <div v-if="displayArticle.authorNote && displayArticle.authorNotePosition === 'top'" class="mb-8 rounded-xl bg-linear-bg-secondary border-l-4 border-linear-accent/60 px-5 py-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-linear-accent/70 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+          </svg>
+          <span class="text-xs font-medium text-linear-accent/70 tracking-wide uppercase">作者的话</span>
+        </div>
+        <div class="text-sm text-linear-text-secondary leading-relaxed article-body" v-html="displayArticle.authorNote"></div>
+      </div>
+
       <ArticleContent :html="htmlContent" />
+
+      <!-- Author note (bottom position) -->
+      <div v-if="displayArticle.authorNote && displayArticle.authorNotePosition === 'bottom'" class="mt-10 rounded-xl bg-linear-bg-secondary border-l-4 border-linear-accent/60 px-5 py-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-linear-accent/70 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+          </svg>
+          <span class="text-xs font-medium text-linear-accent/70 tracking-wide uppercase">作者的话</span>
+        </div>
+        <div class="text-sm text-linear-text-secondary leading-relaxed article-body" v-html="displayArticle.authorNote"></div>
+      </div>
 
     <!-- Attached files -->
     <div v-if="displayArticle && displayArticle.files && displayArticle.files.length" class="mt-10 pt-6 border-t border-linear-border/50">
@@ -491,7 +594,7 @@ const adjacent = computed(() => {
     </template>
 
     <!-- Article navigation: always visible (even when locked) -->
-    <nav v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
+    <nav ref="bottomNavRef" v-if="adjacent.prev || adjacent.next || adjacent.siblings.length > 1" class="mt-10 pt-6 border-t border-linear-border/50">
       <div class="flex items-center justify-between gap-4">
         <!-- Prev -->
         <div v-if="adjacent.prev" class="flex-1 min-w-0">
@@ -585,6 +688,18 @@ const adjacent = computed(() => {
                 {{ size.label }}
               </button>
             </div>
+            <!-- Theme toggle -->
+            <button
+              @click="toggleTheme"
+              class="flex items-center justify-center w-10 h-10 rounded-xl shrink-0 bg-linear-bg-secondary text-linear-text-secondary border border-linear-border/50 hover:bg-linear-bg-tertiary transition-colors"
+            >
+              <svg v-if="theme === 'dark'" class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <svg v-else class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -594,7 +709,8 @@ const adjacent = computed(() => {
             <!-- Nav row -->
             <div class="flex items-center justify-around mb-2">
               <button
-                @click="showReadingMenu = false; adjacent.prev && handleNavTo(adjacent.prev)"
+                @touchend.stop.prevent="menuNav('prev')"
+                @click.stop="menuNav('prev')"
                 :disabled="!adjacent.prev"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.prev ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -606,7 +722,8 @@ const adjacent = computed(() => {
               </button>
 
               <button
-                @click="showReadingMenu = false; showTocDialog = true"
+                @touchend.stop.prevent="menuNav('toc')"
+                @click.stop="menuNav('toc')"
                 :disabled="adjacent.siblings.length <= 1"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.siblings.length > 1 ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -618,7 +735,8 @@ const adjacent = computed(() => {
               </button>
 
               <button
-                @click="showReadingMenu = false; adjacent.next && handleNavTo(adjacent.next)"
+                @touchend.stop.prevent="menuNav('next')"
+                @click.stop="menuNav('next')"
                 :disabled="!adjacent.next"
                 class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
                 :class="adjacent.next ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
@@ -654,26 +772,15 @@ const adjacent = computed(() => {
               {{ displayArticle?.collection || displayArticle?.tags?.[0] || '目录' }}
             </h3>
             <div class="flex items-center gap-2">
-              <template v-if="!displayArticle?.collectionSlug">
-                <button
-                  @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
-                  class="flex items-center justify-center w-7 h-7 rounded-lg text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
-                  :title="sortOrder === 'desc' ? '降序' : '升序'"
-                >
-                  <svg class="w-3.5 h-3.5 transition-transform duration-300" :class="sortOrder === 'asc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                  </svg>
-                </button>
-                <button
-                  @click="sortBy = sortBy === 'created' ? 'updated' : 'created'"
-                  class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
-                >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
-                  </svg>
-                  {{ sortBy === 'updated' ? '最近更新' : '最新创建' }}
-                </button>
-              </template>
+              <button
+                @click="sortBy = sortBy === 'added' ? 'updated' : 'added'"
+                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
+                </svg>
+                {{ sortBy === 'updated' ? '最近更新' : '最近加入' }}
+              </button>
               <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
                 <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12" />
