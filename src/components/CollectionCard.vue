@@ -9,7 +9,7 @@ const props = defineProps({
 })
 
 const { getCollectionDotType } = useReadStatus()
-const { checkArticleAccess } = useInvitation()
+const { isArticleUnlocked } = useInvitation()
 
 const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
 const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
@@ -49,7 +49,7 @@ const totalWords = computed(() => {
   return props.articles.reduce((sum, a) => sum + (a.wordCount || 0), 0)
 })
 const allLocked = computed(() => props.articles.length > 0 && props.articles.every(a => a.locked))
-const allUnlocked = computed(() => allLocked.value && props.articles.every(a => checkArticleAccess(a.slug, a.lockHash)))
+const allUnlocked = computed(() => allLocked.value && props.articles.every(a => isArticleUnlocked(a.slug)))
 </script>
 
 <template>
@@ -91,7 +91,7 @@ const allUnlocked = computed(() => allLocked.value && props.articles.every(a => 
         <svg v-if="collection.pinned" class="w-3.5 h-3.5 text-linear-accent/60 shrink-0" fill="currentColor" viewBox="0 0 24 24">
           <path d="M16 3a1 1 0 011.447.894l.553 5.53 2.553 1.277A1 1 0 0120 12.618V14a1 1 0 01-1 1h-5v6l-1 2-1-2v-6H7a1 1 0 01-1-1v-1.382a1 1 0 01-.447-.894L6 11.618l2.553-1.276L9.106 4.81A1 1 0 0110 4h6z" />
         </svg>
-        <svg v-if="allLocked && !allUnlocked" class="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <svg v-if="allLocked && !allUnlocked" class="w-3.5 h-3.5 text-red-800/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
         </svg>
         <svg v-else-if="allLocked" class="w-3.5 h-3.5 text-linear-success/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

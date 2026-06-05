@@ -5,3 +5,5 @@ dist/
 public/files/
 content/
 .content-cache/
+.claude/
+*.zip

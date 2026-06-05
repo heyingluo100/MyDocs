@@ -5,6 +5,7 @@ const articles = ref([])
 const tagNames = ref([])
 const collectionList = ref([])
 const loaded = ref(false)
+const loadError = ref(false)
 const sortBy = ref('added')
 
 function updateData(newData) {
@@ -12,13 +13,21 @@ function updateData(newData) {
   tagNames.value = newData.allTags || []
   collectionList.value = newData.allCollections || []
   loaded.value = true
+  loadError.value = false
 }
 
 // Initial load via fetch (not import, so Vite won't HMR it)
 fetch('/articles.json')
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return r.json()
+  })
   .then(data => updateData(data))
-  .catch(() => console.error('[useArticles] 加载 articles.json 失败'))
+  .catch(() => {
+    console.error('[useArticles] 加载 articles.json 失败')
+    loaded.value = true
+    loadError.value = true
+  })
 
 // Listen for HMR content updates in dev mode
 if (import.meta.hot) {
@@ -103,6 +112,7 @@ export function useArticles() {
     allTags,
     allCollections,
     loaded,
+    loadError,
     sortBy,
     getArticlesByTag,
     getArticleBySlug,

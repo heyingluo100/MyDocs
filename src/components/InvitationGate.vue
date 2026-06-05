@@ -8,6 +8,7 @@ const { theme } = useTheme()
 
 const code = ref('')
 const error = ref(false)
+const errorMsg = ref('')
 const shaking = ref(false)
 const loading = ref(false)
 
@@ -16,11 +17,14 @@ const handleSubmit = async () => {
   loading.value = true
   error.value = false
 
-  const ok = await submitGlobalCode(code.value.trim())
+  const result = await submitGlobalCode(code.value.trim())
   loading.value = false
 
-  if (!ok) {
+  if (!result.success) {
     error.value = true
+    errorMsg.value = result.locked
+      ? `尝试次数过多，请 ${result.retryAfter} 秒后重试`
+      : '邀请码错误，请重新输入'
     shaking.value = true
     setTimeout(() => { shaking.value = false }, 500)
   }
@@ -72,7 +76,7 @@ const handleSubmit = async () => {
               @input="error = false"
             />
             <p v-if="error" class="mt-2 text-xs text-red-400 text-center">
-              邀请码错误，请重新输入
+              {{ errorMsg }}
             </p>
           </div>
 

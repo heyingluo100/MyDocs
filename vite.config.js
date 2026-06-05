@@ -105,5 +105,9 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     }
+  },
+  esbuild: {
+    // 生产构建剥离 console 调用（保留 debugger，反调试需要）
+    drop: process.env.NODE_ENV === 'production' ? ['console'] : []
   }
 })

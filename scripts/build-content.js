@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import crypto from 'crypto'
 import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
@@ -16,7 +16,9 @@ const outputJson = path.join(root, '.content-cache', 'articles.json')
 const publicFiles = path.join(root, 'public', 'files')
 
 const md = new MarkdownIt({
-  html: true,
+  // 禁止原生 HTML 注入：作者写的 markdown 中如果带 <script>/<img onerror>
+  // 会原样进 Closed Shadow DOM 执行（自用是 self-XSS，开放投稿则是真 XSS）
+  html: false,
   linkify: true,
   typographer: true
 })
@@ -29,14 +31,25 @@ const TEXT_EXTS = ['.txt']
 const OTHER_FILE_EXTS = ['.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.csv']
 
 // AES-256-GCM encryption for locked articles
+// 密钥派生：PBKDF2(SHA-256, 200000 iterations) — 在 sha256(code) 基础上再加 200k 次 SHA-256
+// 攻击者暴力破解 code 的成本提升 200000 倍（每次尝试需完成完整 PBKDF2）
+const PBKDF2_ITERATIONS = 200000
+const PBKDF2_KEYLEN = 32 // 32 bytes = AES-256
+const SALT_LEN = 16
+
 function encryptContent(plainBase64, hashHex) {
-  const key = Buffer.from(hashHex, 'hex') // 32 bytes = AES-256
-  // Deterministic IV: derived from content hash so same content + same key = same ciphertext
-  const iv = crypto.createHash('md5').update(plainBase64).digest().subarray(0, 12)
+  // salt 由内容衍生（同样内容+同样邀请码 → 同样密文，避免每次 build 改变产物）
+  const salt = crypto.createHash('sha256').update(plainBase64).digest().subarray(0, SALT_LEN)
+  // PBKDF2 password 用 lockHash（hex 字符串），客户端也用相同输入做派生
+  const key = crypto.pbkdf2Sync(hashHex, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, 'sha256')
+  // IV 同样确定性派生，混入 salt 区分
+  const iv = crypto.createHash('md5').update(Buffer.concat([salt, Buffer.from(plainBase64, 'utf8')])).digest().subarray(0, 12)
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
   const encrypted = Buffer.concat([cipher.update(plainBase64, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag() // 16 bytes
   return {
+    v: 2, // 协议版本：v2 = PBKDF2 + salt
+    salt: salt.toString('base64'),
     iv: iv.toString('base64'),
     ct: Buffer.concat([encrypted, tag]).toString('base64')
   }
@@ -48,12 +61,15 @@ function encryptContent(plainBase64, hashHex) {
 function getFileDates(filePath) {
   try {
     const relPath = path.relative(root, filePath).replace(/\\/g, '/')
-    const gitAdded = execSync(
-      `git log --diff-filter=A --follow --format=%aI -- "${relPath}"`,
+    // 用 execFileSync 跳过 shell 解析，避免文件名含 $/`/" 等导致的命令注入
+    const gitAdded = execFileSync(
+      'git',
+      ['log', '--diff-filter=A', '--follow', '--format=%aI', '--', relPath],
       { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
     ).trim().split('\n').pop()
-    const gitUpdated = execSync(
-      `git log -1 --format=%aI -- "${relPath}"`,
+    const gitUpdated = execFileSync(
+      'git',
+      ['log', '-1', '--format=%aI', '--', relPath],
       { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
     ).trim()
 

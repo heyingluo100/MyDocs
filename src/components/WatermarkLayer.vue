@@ -4,6 +4,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const canvasRef = ref(null)
 let animationId = null
 let refreshInterval = null
+let resizeListener = null
+let observer = null
 
 function generateWatermark(canvas) {
   if (!canvas) return
@@ -49,7 +51,8 @@ function handleResize() {
 
 onMounted(() => {
   generateWatermark(canvasRef.value)
-  window.addEventListener('resize', handleResize)
+  resizeListener = handleResize
+  window.addEventListener('resize', resizeListener)
 
   // Refresh watermark every 30 seconds (anti-DOM manipulation)
   refreshInterval = setInterval(() => {
@@ -57,7 +60,7 @@ onMounted(() => {
   }, 30000)
 
   // Monitor canvas removal (MutationObserver)
-  const observer = new MutationObserver(() => {
+  observer = new MutationObserver(() => {
     if (!document.querySelector('#watermark-canvas')) {
       // Canvas was removed, re-create it
       const newCanvas = document.createElement('canvas')
@@ -69,12 +72,13 @@ onMounted(() => {
     }
   })
   observer.observe(document.body, { childList: true, subtree: true })
+})
 
-  onUnmounted(() => {
-    window.removeEventListener('resize', handleResize)
-    clearInterval(refreshInterval)
-    observer.disconnect()
-  })
+// Cleanup（提到 setup 顶层，符合 Vue 3 推荐写法）
+onUnmounted(() => {
+  if (resizeListener) window.removeEventListener('resize', resizeListener)
+  if (refreshInterval) clearInterval(refreshInterval)
+  if (observer) observer.disconnect()
 })
 </script>
 

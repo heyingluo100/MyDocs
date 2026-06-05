@@ -4,21 +4,28 @@ export function useProtection() {
   const isDevToolsOpen = ref(false)
   let devtoolsCheckInterval = null
   let debuggerInterval = null
+  let consoleInterval = null
   const isDev = import.meta.env.DEV
+  // 在 setup 顶层捕获事件处理器引用，方便 onUnmounted 解绑
+  const handlers = {
+    contextmenu: null,
+    keydown: null,
+    dragstart: null,
+    selectstart: null,
+    visibilitychange: null
+  }
 
   onMounted(() => {
     // Skip aggressive protection in dev mode
     if (isDev) return
     // === Layer 2: JS Behavior Interception ===
 
-    // Disable right-click context menu
-    const handleContextMenu = (e) => {
+    handlers.contextmenu = (e) => {
       e.preventDefault()
       return false
     }
 
-    // Block keyboard shortcuts
-    const handleKeyDown = (e) => {
+    handlers.keydown = (e) => {
       // Ctrl+C, Ctrl+U, Ctrl+S, Ctrl+P, Ctrl+A
       if (e.ctrlKey && ['c', 'u', 's', 'p', 'a'].includes(e.key.toLowerCase())) {
         e.preventDefault()
@@ -41,29 +48,27 @@ export function useProtection() {
       }
     }
 
-    // Disable text dragging
-    const handleDragStart = (e) => {
+    handlers.dragstart = (e) => {
       e.preventDefault()
       return false
     }
 
-    // Disable text selection on mobile
-    const handleSelectStart = (e) => {
+    handlers.selectstart = (e) => {
       e.preventDefault()
       return false
     }
 
-    document.addEventListener('contextmenu', handleContextMenu)
-    document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('dragstart', handleDragStart)
-    document.addEventListener('selectstart', handleSelectStart)
+    document.addEventListener('contextmenu', handlers.contextmenu)
+    document.addEventListener('keydown', handlers.keydown)
+    document.addEventListener('dragstart', handlers.dragstart)
+    document.addEventListener('selectstart', handlers.selectstart)
 
     // === Layer 4: Anti-debugging ===
 
     // DevTools size detection
     devtoolsCheckInterval = setInterval(() => {
-      const widthThreshold = window.outerWidth - window.innerWidth > 160
-      const heightThreshold = window.outerHeight - window.innerHeight > 160
+      const widthThreshold = window.outerWidth - window.innerWidth > 250
+      const heightThreshold = window.outerHeight - window.innerHeight > 250
       const wasOpen = isDevToolsOpen.value
       isDevToolsOpen.value = widthThreshold || heightThreshold
 
@@ -99,13 +104,12 @@ export function useProtection() {
     }, 3000)
 
     // Clear console
-    const clearConsole = () => {
+    consoleInterval = setInterval(() => {
       console.clear()
-    }
-    const consoleInterval = setInterval(clearConsole, 2000)
+    }, 2000)
 
     // === Layer 6: Tab visibility detection ===
-    const handleVisibilityChange = () => {
+    handlers.visibilitychange = () => {
       const content = document.querySelector('.protected-content')
       if (!content) return
       if (document.hidden) {
@@ -120,19 +124,19 @@ export function useProtection() {
         }, 300)
       }
     }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    document.addEventListener('visibilitychange', handlers.visibilitychange)
+  })
 
-    // Cleanup
-    onUnmounted(() => {
-      document.removeEventListener('contextmenu', handleContextMenu)
-      document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('dragstart', handleDragStart)
-      document.removeEventListener('selectstart', handleSelectStart)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      clearInterval(devtoolsCheckInterval)
-      clearInterval(debuggerInterval)
-      clearInterval(consoleInterval)
-    })
+  // Cleanup（提到 setup 顶层，符合 Vue 3 推荐写法）
+  onUnmounted(() => {
+    if (handlers.contextmenu) document.removeEventListener('contextmenu', handlers.contextmenu)
+    if (handlers.keydown) document.removeEventListener('keydown', handlers.keydown)
+    if (handlers.dragstart) document.removeEventListener('dragstart', handlers.dragstart)
+    if (handlers.selectstart) document.removeEventListener('selectstart', handlers.selectstart)
+    if (handlers.visibilitychange) document.removeEventListener('visibilitychange', handlers.visibilitychange)
+    if (devtoolsCheckInterval) clearInterval(devtoolsCheckInterval)
+    if (debuggerInterval) clearInterval(debuggerInterval)
+    if (consoleInterval) clearInterval(consoleInterval)
   })
 
   return { isDevToolsOpen }

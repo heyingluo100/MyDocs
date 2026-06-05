@@ -96,8 +96,8 @@ onMounted(() => {
   // DevTools detection: destroy shadow content when DevTools opens, restore when closed
   if (!import.meta.env.DEV) {
     devtoolsTimer = setInterval(() => {
-      const open = window.outerWidth - window.innerWidth > 160 ||
-                   window.outerHeight - window.innerHeight > 160
+      const open = window.outerWidth - window.innerWidth > 250 ||
+                   window.outerHeight - window.innerHeight > 250
       if (open && !wasOpen) {
         clearShadow()
         // Completely collapse the host element — nothing to see, nothing to scrape

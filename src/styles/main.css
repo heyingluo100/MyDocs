@@ -69,6 +69,14 @@ html.theme-transition *::after {
   -webkit-user-drag: none;
 }
 
+/* 图片型文章的图片：允许点击（触发灯箱）但禁拖拽/禁长按菜单/禁选中 */
+.protected-img {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* 打印保护 */
 @media print {
   body {

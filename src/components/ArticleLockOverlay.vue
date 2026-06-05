@@ -14,6 +14,7 @@ const { submitArticleCode } = useInvitation()
 
 const code = ref('')
 const error = ref(false)
+const errorMsg = ref('')
 const shaking = ref(false)
 const loading = ref(false)
 
@@ -29,6 +30,9 @@ const handleSubmit = async () => {
     emit('unlocked', result.content)
   } else {
     error.value = true
+    errorMsg.value = result.locked
+      ? `尝试次数过多，请 ${result.retryAfter} 秒后重试`
+      : '邀请码错误'
     shaking.value = true
     setTimeout(() => { shaking.value = false }, 500)
   }
@@ -79,7 +83,7 @@ const handleSubmit = async () => {
             @input="error = false"
           />
           <p v-if="error" class="text-xs text-red-400 text-center">
-            邀请码错误
+            {{ errorMsg }}
           </p>
           <button
             type="submit"

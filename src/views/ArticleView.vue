@@ -46,7 +46,7 @@ const router = useRouter()
 const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy } = useArticles()
 const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
-const { checkArticleAccess } = useInvitation()
+const { checkArticleAccess, isArticleUnlocked } = useInvitation()
 
 // Article lock state
 const articleUnlocked = ref(true)
@@ -609,7 +609,7 @@ const adjacent = computed(() => {
             <div class="min-w-0">
               <p class="text-xs text-linear-text-secondary">上一篇</p>
               <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors flex items-center gap-1">
-                <svg v-if="adjacent.prev.locked && !checkArticleAccess(adjacent.prev.slug, adjacent.prev.lockHash)" class="w-3 h-3 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                <svg v-if="adjacent.prev.locked && !isArticleUnlocked(adjacent.prev.slug)" class="w-3 h-3 text-red-800/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
                 <svg v-else-if="adjacent.prev.locked" class="w-3 h-3 text-linear-success/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
                 {{ adjacent.prev.title }}
               </p>
@@ -641,7 +641,7 @@ const adjacent = computed(() => {
               <p class="text-xs text-linear-text-secondary">下一篇</p>
               <p class="text-sm text-linear-text truncate group-hover:text-linear-accent transition-colors flex items-center justify-end gap-1">
                 {{ adjacent.next.title }}
-                <svg v-if="adjacent.next.locked && !checkArticleAccess(adjacent.next.slug, adjacent.next.lockHash)" class="w-3 h-3 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                <svg v-if="adjacent.next.locked && !isArticleUnlocked(adjacent.next.slug)" class="w-3 h-3 text-red-800/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
                 <svg v-else-if="adjacent.next.locked" class="w-3 h-3 text-linear-success/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
               </p>
             </div>
@@ -807,7 +807,7 @@ const adjacent = computed(() => {
               </svg>
               <span class="truncate flex-1">{{ item.title }}</span>
               <!-- Locked: show lock/unlock icon -->
-              <svg v-if="item.locked && !checkArticleAccess(item.slug, item.lockHash)" class="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <svg v-if="item.locked && !isArticleUnlocked(item.slug)" class="w-3.5 h-3.5 text-red-800/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
               <svg v-else-if="item.locked" class="w-3.5 h-3.5 text-linear-success/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -825,8 +825,8 @@ const adjacent = computed(() => {
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
         <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl">
           <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="w-10 h-10 rounded-full bg-red-800/10 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </div>
@@ -927,8 +927,8 @@ const adjacent = computed(() => {
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="handleNavCancel"></div>
         <div class="relative bg-linear-bg rounded-2xl border border-linear-border/50 p-6 max-w-sm mx-4 shadow-xl">
           <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <div class="w-10 h-10 rounded-full bg-red-800/10 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-red-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
             </div>
