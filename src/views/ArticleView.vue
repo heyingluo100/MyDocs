@@ -142,6 +142,8 @@ const menuNav = (action) => {
     if (action === 'prev' && adjacent.value.prev) handleNavTo(adjacent.value.prev)
     else if (action === 'next' && adjacent.value.next) handleNavTo(adjacent.value.next)
     else if (action === 'toc') showTocDialog.value = true
+    else if (action === 'top') window.scrollTo({ top: 0, behavior: 'smooth' })
+    else if (action === 'bottom') window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
   })
 }
 
@@ -193,6 +195,12 @@ watch(() => route.params.slug, async (newSlug, oldSlug) => {
     saveReadingPosition(oldSlug, readingProgress.value)
   }
 
+  // Same-component navigation (prev/next) reuses ArticleView, so App.vue's
+  // Transition @enter won't fire — scroll to top manually here.
+  if (oldSlug && oldSlug !== newSlug) {
+    window.scrollTo(0, 0)
+  }
+
   if (!newSlug) return
   currentSlug.value = newSlug
 
@@ -211,7 +219,8 @@ watch(() => route.params.slug, async (newSlug, oldSlug) => {
   // Check article lock (encrypted content)
   if (current.locked && current.encrypted) {
     const result = await checkArticleAccess(newSlug, current.content)
-    if (!result.unlocked) {
+    // Treat null content (article-lock disabled but article is encrypted) as not unlocked
+    if (!result.unlocked || !result.content) {
       articleUnlocked.value = false
       frozenArticle.value = { ...current }
       isInitialLoad = false
@@ -285,7 +294,7 @@ watch(articles, async () => {
     // Check article lock on first load too
     if (current.locked && current.encrypted) {
       const result = await checkArticleAccess(slug, current.content)
-      if (!result.unlocked) {
+      if (!result.unlocked || !result.content) {
         articleUnlocked.value = false
         frozenArticle.value = { ...current }
         return
@@ -709,10 +718,21 @@ const adjacent = computed(() => {
             <!-- Nav row -->
             <div class="flex items-center justify-around mb-2">
               <button
+                @touchend.stop.prevent="menuNav('top')"
+                @click.stop="menuNav('top')"
+                class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors text-linear-text-secondary active:bg-linear-bg-tertiary"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+                </svg>
+                <span class="text-xs">顶部</span>
+              </button>
+
+              <button
                 @touchend.stop.prevent="menuNav('prev')"
                 @click.stop="menuNav('prev')"
                 :disabled="!adjacent.prev"
-                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors"
                 :class="adjacent.prev ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
               >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -725,7 +745,7 @@ const adjacent = computed(() => {
                 @touchend.stop.prevent="menuNav('toc')"
                 @click.stop="menuNav('toc')"
                 :disabled="adjacent.siblings.length <= 1"
-                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors"
                 :class="adjacent.siblings.length > 1 ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
               >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -738,13 +758,24 @@ const adjacent = computed(() => {
                 @touchend.stop.prevent="menuNav('next')"
                 @click.stop="menuNav('next')"
                 :disabled="!adjacent.next"
-                class="flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors"
+                class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors"
                 :class="adjacent.next ? 'text-linear-text-secondary active:bg-linear-bg-tertiary' : 'text-linear-text-secondary/30'"
               >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
                 </svg>
                 <span class="text-xs">下一章</span>
+              </button>
+
+              <button
+                @touchend.stop.prevent="menuNav('bottom')"
+                @click.stop="menuNav('bottom')"
+                class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors text-linear-text-secondary active:bg-linear-bg-tertiary"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
+                </svg>
+                <span class="text-xs">底部</span>
               </button>
             </div>
           </div>

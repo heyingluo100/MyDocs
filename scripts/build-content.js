@@ -8,6 +8,7 @@ import MarkdownIt from 'markdown-it'
 import mammoth from 'mammoth'
 import WordExtractor from 'word-extractor'
 import JSZip from 'jszip'
+import invitationConfig from '../src/config/invitation.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
@@ -481,13 +482,25 @@ async function buildArticles() {
   const allTags = [...tagSet]
 
   // Encrypt locked articles: content becomes AES-256-GCM ciphertext, lockHash removed
+  // Article-lock master switch (invitation.js) gates the whole feature:
+  //   enabled: true  → encrypt as before
+  //   enabled: false → skip encryption AND clear `locked` so locked articles read as public
+  const articleLockEnabled = invitationConfig?.article?.enabled === true
   let encryptedCount = 0
+  let unlockedByMasterCount = 0
   for (const article of articles) {
     if (article.locked && article.lockHash) {
-      article.content = encryptContent(article.content, article.lockHash)
-      article.encrypted = true
-      delete article.lockHash
-      encryptedCount++
+      if (articleLockEnabled) {
+        article.content = encryptContent(article.content, article.lockHash)
+        article.encrypted = true
+        delete article.lockHash
+        encryptedCount++
+      } else {
+        // Master switch off: treat as public, drop lock metadata so UI shows no lock
+        article.locked = false
+        delete article.lockHash
+        unlockedByMasterCount++
+      }
     } else {
       delete article.lockHash
     }
@@ -498,6 +511,9 @@ async function buildArticles() {
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
   if (encryptedCount > 0) {
     console.log(`[build-content] 🔒 已加密 ${encryptedCount} 篇锁定文档（AES-256-GCM）`)
+  }
+  if (unlockedByMasterCount > 0) {
+    console.log(`[build-content] ⚠️  单篇锁总闸已关闭：${unlockedByMasterCount} 篇带 .lock 的文章已按公开内容打包（明文）`)
   }
   if (filesCopied > 0) {
     console.log(`[build-content] 📎 复制了 ${filesCopied} 个附件文件到 public/files/`)
