@@ -5,9 +5,10 @@ import { useArticles } from '../composables/useArticles.js'
 import TagBottomSheet from '../components/TagBottomSheet.vue'
 import ArticleCard from '../components/ArticleCard.vue'
 import CollectionCard from '../components/CollectionCard.vue'
+import ReaderGuideBanner from '../components/ReaderGuideBanner.vue'
 
 const route = useRoute()
-const { getArticlesByTag, allCollections, sortBy, loaded, loadError } = useArticles()
+const { getArticlesByTag, allCollections, sortBy, loaded, loadError, readerGuide } = useArticles()
 const showMobileSheet = ref(false)
 const showSortMenu = ref(false)
 
@@ -93,6 +94,9 @@ const totalCount = computed(() => filteredArticles.value.length)
   <div>
     <!-- Article list -->
     <div class="flex-1 min-w-0">
+      <!-- Reader guide banner (homepage only, no tag filter) -->
+      <ReaderGuideBanner v-if="!currentTag && readerGuide" :html="readerGuide" />
+
       <div class="flex items-center gap-2 sm:gap-3 mb-4 flex-nowrap">
         <h1 class="text-xl font-bold text-linear-text truncate min-w-0">
           {{ currentTag || '全部文档' }}

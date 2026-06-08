@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 const articles = ref([])
 const tagNames = ref([])
 const collectionList = ref([])
+const readerGuide = ref('')
 const loaded = ref(false)
 const loadError = ref(false)
 const sortBy = ref('added')
@@ -12,6 +13,7 @@ function updateData(newData) {
   articles.value = newData.articles || []
   tagNames.value = newData.allTags || []
   collectionList.value = newData.allCollections || []
+  readerGuide.value = newData.readerGuide || ''
   loaded.value = true
   loadError.value = false
 }
@@ -111,6 +113,7 @@ export function useArticles() {
     articles,
     allTags,
     allCollections,
+    readerGuide,
     loaded,
     loadError,
     sortBy,

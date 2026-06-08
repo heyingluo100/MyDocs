@@ -506,9 +506,20 @@ async function buildArticles() {
     }
   }
 
-  const output = { allTags, allCollections: collections, articles }
+  // Reader guide: render 读者使用指南.md (root) into HTML for the homepage banner
+  let readerGuide = null
+  const guidePath = path.join(root, '读者使用指南.md')
+  if (fs.existsSync(guidePath)) {
+    const raw = fs.readFileSync(guidePath, 'utf-8')
+    readerGuide = md.render(raw)
+  }
+
+  const output = { allTags, allCollections: collections, articles, readerGuide }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
+  if (readerGuide) {
+    console.log(`[build-content] 📖 已嵌入读者使用指南（首页折叠 banner）`)
+  }
   if (encryptedCount > 0) {
     console.log(`[build-content] 🔒 已加密 ${encryptedCount} 篇锁定文档（AES-256-GCM）`)
   }
