@@ -87,7 +87,10 @@ export function useArticles() {
 
     // If article is in a collection, navigate within the collection only
     if (article.collectionSlug) {
-      const siblings = articles.value.filter(a => a.collectionSlug === article.collectionSlug)
+      // 合集内翻页顺序与 CollectionView 保持一致：按 order 序号（源自 .order 文件）升序
+      const siblings = articles.value
+        .filter(a => a.collectionSlug === article.collectionSlug)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       const index = siblings.findIndex(a => a.slug === slug)
       return {
         prev: index > 0 ? siblings[index - 1] : null,

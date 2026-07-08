@@ -26,7 +26,8 @@ const collectionArticles = computed(() => {
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    return 0 // preserve original order (filename sort from build)
+    // 非置顶章节按构建时写入的 order 序号（源自 .order 文件）升序展示
+    return (a.order ?? 0) - (b.order ?? 0)
   })
 })
 

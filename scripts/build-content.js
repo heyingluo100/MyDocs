@@ -406,7 +406,28 @@ async function buildArticles() {
       if (fs.statSync(filePath).isDirectory()) {
         const collectionName = file
         const colSlug = slugify(tag + '-' + collectionName) || collectionName
-        const subFiles = fs.readdirSync(filePath).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+        const rawSubFiles = fs.readdirSync(filePath)
+
+        // Read .order file to control chapter order (one filename per line, incl. extension).
+        // 作者手动指定的章节顺序优先；.order 里未列出的文件排到末尾，并按文件名兜底排序。
+        const orderFilePath = path.join(filePath, '.order')
+        let orderList = []
+        if (fs.existsSync(orderFilePath)) {
+          orderList = fs.readFileSync(orderFilePath, 'utf-8')
+            .split(/\r?\n/)
+            .map(l => l.trim())
+            .filter(l => l.length > 0)
+        }
+        const orderIndexOf = (name) => {
+          const idx = orderList.indexOf(name)
+          return idx === -1 ? Infinity : idx
+        }
+        const subFiles = [...rawSubFiles].sort((a, b) => {
+          const ia = orderIndexOf(a)
+          const ib = orderIndexOf(b)
+          if (ia !== ib) return ia - ib
+          return a.localeCompare(b, 'zh-CN')
+        })
 
         // Read .tags file inside collection folder for extra tags
         const extraTags = readExtraTags(path.join(filePath, '.tags'))
@@ -438,6 +459,7 @@ async function buildArticles() {
         }
 
         let count = 0
+        let orderSeq = 0
         for (const subFile of subFiles) {
           const subFilePath = path.join(filePath, subFile)
           const article = await processFile(subFilePath, collectionTags, collectionName, colSlug)
@@ -447,8 +469,28 @@ async function buildArticles() {
               article.locked = true
               article.lockHash = colLockHash
             }
+            // 章节顺序：按 subFiles 已排好的顺序依次编号，前端合集视图据此展示
+            article.order = orderSeq++
             articles.push(article)
             count++
+          }
+        }
+
+        // 提醒：.order 里列了但目录中不存在的文件（可能写错文件名）
+        if (orderList.length > 0) {
+          const actualNames = new Set(rawSubFiles)
+          const missing = orderList.filter(n => !actualNames.has(n))
+          if (missing.length > 0) {
+            console.warn(`[build-content] ⚠️  合集「${collectionName}」的 .order 列出但目录中不存在：${missing.join('、')}`)
+          }
+          // 提醒：目录里有内容文件但 .order 没列到（会被排到末尾）
+          const contentExts = new Set([...MARKDOWN_EXTS, ...WORD_EXTS, ...DOC_EXTS, ...TEXT_EXTS, ...OTHER_FILE_EXTS])
+          const unlisted = rawSubFiles.filter(n => {
+            if (n.startsWith('.') || n.startsWith('~$') || n.endsWith('.tags')) return false
+            return contentExts.has(path.extname(n).toLowerCase()) && !orderList.includes(n)
+          })
+          if (unlisted.length > 0) {
+            console.warn(`[build-content] ⚠️  合集「${collectionName}」有文件未写入 .order（将排到末尾）：${unlisted.join('、')}`)
           }
         }
 
