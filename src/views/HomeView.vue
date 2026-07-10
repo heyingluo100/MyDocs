@@ -12,10 +12,25 @@ const { getArticlesByTag, allCollections, sortBy, loaded, loadError, readerGuide
 const showMobileSheet = ref(false)
 const showSortMenu = ref(false)
 
-const sortLabel = computed(() => sortBy.value === 'updated' ? '最近更新' : '最近加入')
+// 排序方向：'desc'=正序（最新在前，现有默认），'asc'=倒序（最早在前）。组件级，不跨页共享
+const sortDir = ref('desc')
 
-const handleSort = (value) => {
-  sortBy.value = value
+const SORT_OPTIONS = [
+  { by: 'added', dir: 'desc', label: '最近加入' },
+  { by: 'added', dir: 'asc', label: '最早加入' },
+  { by: 'updated', dir: 'desc', label: '最近更新' },
+  { by: 'updated', dir: 'asc', label: '最早更新' }
+]
+
+const sortLabel = computed(() =>
+  SORT_OPTIONS.find(o => o.by === sortBy.value && o.dir === sortDir.value)?.label || '最近加入'
+)
+
+const isCurrentSort = (o) => o.by === sortBy.value && o.dir === sortDir.value
+
+const handleSort = (o) => {
+  sortBy.value = o.by
+  sortDir.value = o.dir
   showSortMenu.value = false
 }
 
@@ -81,7 +96,10 @@ const mixedItems = computed(() => {
       if (!aGlobalPin && bGlobalPin) return 1
       return aData.pinOrder - bData.pinOrder
     }
-    return b.sortDate.localeCompare(a.sortDate)
+    // 方向只作用于非置顶的日期排序：desc=最新在前，asc=最早在前
+    return sortDir.value === 'asc'
+      ? a.sortDate.localeCompare(b.sortDate)
+      : b.sortDate.localeCompare(a.sortDate)
   })
 
   return items
@@ -128,22 +146,14 @@ const totalCount = computed(() => filteredArticles.value.length)
                 class="absolute right-0 top-full mt-1.5 bg-linear-bg rounded-xl border border-linear-border/50 shadow-lg overflow-hidden z-30 min-w-[8rem]"
               >
                 <button
+                  v-for="o in SORT_OPTIONS"
+                  :key="o.by + '-' + o.dir"
                   class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary whitespace-nowrap"
-                  :class="sortBy === 'added' ? 'text-linear-accent' : 'text-linear-text'"
-                  @click="handleSort('added')"
+                  :class="isCurrentSort(o) ? 'text-linear-accent' : 'text-linear-text'"
+                  @click="handleSort(o)"
                 >
-                  最近加入
-                  <svg v-if="sortBy === 'added'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                </button>
-                <button
-                  class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-linear-bg-tertiary whitespace-nowrap"
-                  :class="sortBy === 'updated' ? 'text-linear-accent' : 'text-linear-text'"
-                  @click="handleSort('updated')"
-                >
-                  最近更新
-                  <svg v-if="sortBy === 'updated'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {{ o.label }}
+                  <svg v-if="isCurrentSort(o)" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
                 </button>

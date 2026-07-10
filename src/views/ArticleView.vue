@@ -55,6 +55,10 @@ const articleUnlocked = ref(true)
 const showDeletedDialog = ref(false)
 const showUpdatedDialog = ref(false)
 const showTocDialog = ref(false)
+// 目录/翻页方向：false=正序（合集按 .order 升序 / 标签按日期最新在前），true=倒序
+// 组件级 state，不跨页共享；从列表进入文章时组件重新挂载 → 默认正序，
+// 合集内翻页复用同组件 → 保持读者选择的方向（符合"各列表各自默认正序"）
+const tocReversed = ref(false)
 const showContinueDialog = ref(false)
 const showLockedNavDialog = ref(false)
 const pendingNavTarget = ref(null)
@@ -427,29 +431,41 @@ const adjacent = computed(() => {
   if (!displayArticle.value) return { prev: null, next: null, siblings: [] }
   const result = getAdjacentArticles(displayArticle.value.slug, navContextTag.value)
   const ctxTag = navContextTag.value
-  // Sort siblings: pinned first, then by date
-  const sorted = [...result.siblings].sort((a, b) => {
-    const aGlobalPin = a.pinned && !a.pinTag
-    const bGlobalPin = b.pinned && !b.pinTag
-    const aTagPin = a.pinned && a.pinTag && a.pinTag === ctxTag
-    const bTagPin = b.pinned && b.pinTag && b.pinTag === ctxTag
-    const aPinned = aGlobalPin || aTagPin
-    const bPinned = bGlobalPin || bTagPin
-    if (aPinned && !bPinned) return -1
-    if (!aPinned && bPinned) return 1
-    if (aPinned && bPinned) {
-      if (aGlobalPin && !bGlobalPin) return -1
-      if (!aGlobalPin && bGlobalPin) return 1
-      return a.pinOrder - b.pinOrder
-    }
-    const dateA = sortBy.value === 'updated'
-      ? (a.updatedAt || a.addedAt || a.createdAt || '')
-      : (a.addedAt || a.createdAt || '')
-    const dateB = sortBy.value === 'updated'
-      ? (b.updatedAt || b.addedAt || b.createdAt || '')
-      : (b.addedAt || b.createdAt || '')
-    return dateB.localeCompare(dateA)
-  })
+
+  let sorted
+  if (displayArticle.value.collectionSlug) {
+    // 合集文章：直接沿用 getAdjacentArticles 返回的 .order 升序，不按日期重排
+    // （否则会覆盖作者用 .order 指定的章节顺序）
+    sorted = result.siblings
+  } else {
+    // 普通文章（同标签）：置顶优先，其余按日期降序
+    sorted = [...result.siblings].sort((a, b) => {
+      const aGlobalPin = a.pinned && !a.pinTag
+      const bGlobalPin = b.pinned && !b.pinTag
+      const aTagPin = a.pinned && a.pinTag && a.pinTag === ctxTag
+      const bTagPin = b.pinned && b.pinTag && b.pinTag === ctxTag
+      const aPinned = aGlobalPin || aTagPin
+      const bPinned = bGlobalPin || bTagPin
+      if (aPinned && !bPinned) return -1
+      if (!aPinned && bPinned) return 1
+      if (aPinned && bPinned) {
+        if (aGlobalPin && !bGlobalPin) return -1
+        if (!aGlobalPin && bGlobalPin) return 1
+        return a.pinOrder - b.pinOrder
+      }
+      const dateA = sortBy.value === 'updated'
+        ? (a.updatedAt || a.addedAt || a.createdAt || '')
+        : (a.addedAt || a.createdAt || '')
+      const dateB = sortBy.value === 'updated'
+        ? (b.updatedAt || b.addedAt || b.createdAt || '')
+        : (b.addedAt || b.createdAt || '')
+      return dateB.localeCompare(dateA)
+    })
+  }
+
+  // 倒序：整体翻转（合集 → 末章在前；标签 → 最早在前）
+  if (tocReversed.value) sorted = [...sorted].reverse()
+
   const index = sorted.findIndex(a => a.slug === displayArticle.value.slug)
   return {
     prev: index > 0 ? sorted[index - 1] : null,
@@ -803,7 +819,9 @@ const adjacent = computed(() => {
               {{ displayArticle?.collection || displayArticle?.tags?.[0] || '目录' }}
             </h3>
             <div class="flex items-center gap-2">
+              <!-- 排序依据：仅非合集（同标签列表）有意义，合集按 .order 固定 -->
               <button
+                v-if="!displayArticle?.collectionSlug"
                 @click="sortBy = sortBy === 'added' ? 'updated' : 'added'"
                 class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
               >
@@ -811,6 +829,16 @@ const adjacent = computed(() => {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7h18M3 12h12M3 17h6" />
                 </svg>
                 {{ sortBy === 'updated' ? '最近更新' : '最近加入' }}
+              </button>
+              <!-- 方向：正序/倒序翻转 -->
+              <button
+                @click="tocReversed = !tocReversed"
+                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4h13M3 8h9m-9 4h6m4 8V4m0 16l-4-4m4 4l4-4" />
+                </svg>
+                {{ tocReversed ? '倒序' : '正序' }}
               </button>
               <button @click="showTocDialog = false" class="p-1.5 rounded-lg hover:bg-linear-bg-tertiary transition-colors">
                 <svg class="w-4 h-4 text-linear-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

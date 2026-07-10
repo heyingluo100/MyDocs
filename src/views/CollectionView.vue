@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 import { useReadStatus } from '../composables/useReadStatus.js'
@@ -9,6 +9,9 @@ const route = useRoute()
 const router = useRouter()
 const { getArticlesByCollection, getCollectionBySlug } = useArticles()
 const { markCollectionAsRead } = useReadStatus()
+
+// 章节方向：false=正序（.order 升序，作者指定顺序），true=倒序（末章在前）。默认正序
+const reversed = ref(false)
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -22,13 +25,15 @@ const collectionSlug = computed(() => decodeURIComponent(route.params.slug || ''
 const collection = computed(() => getCollectionBySlug(collectionSlug.value))
 const collectionArticles = computed(() => {
   const articles = getArticlesByCollection(collectionSlug.value)
-  return [...articles].sort((a, b) => {
+  const sorted = [...articles].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    // 非置顶章节按构建时写入的 order 序号（源自 .order 文件）升序展示
-    return (a.order ?? 0) - (b.order ?? 0)
+    // 非置顶章节按构建时写入的 order 序号（源自 .order 文件）
+    const cmp = (a.order ?? 0) - (b.order ?? 0)
+    return reversed.value ? -cmp : cmp
   })
+  return sorted
 })
 
 // Mark collection as read on enter
@@ -72,6 +77,15 @@ watch(collection, (col) => {
             {{ t }}
           </router-link>
           <span class="text-sm text-linear-text-secondary">{{ collection.count }} 篇</span>
+          <button
+            @click="reversed = !reversed"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border border-linear-border bg-linear-bg-secondary text-linear-text-secondary hover:bg-linear-bg-tertiary transition-colors"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4h13M3 8h9m-9 4h6m4 8V4m0 16l-4-4m4 4l4-4" />
+            </svg>
+            {{ reversed ? '倒序' : '正序' }}
+          </button>
         </div>
       </header>
 
