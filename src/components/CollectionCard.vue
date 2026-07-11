@@ -11,7 +11,19 @@ const props = defineProps({
 const { getCollectionDotType } = useReadStatus()
 const { isArticleUnlocked } = useInvitation()
 
-const latestTitle = props.articles.length ? props.articles[props.articles.length - 1].title : ''
+// 「最新」取更新时间最新的一篇（updatedAt 优先，其次 addedAt/createdAt）。
+// 日期相同时用 .order 更大的兜底（更靠后的章节）。不依赖数组下标顺序。
+const latestTitle = computed(() => {
+  if (!props.articles.length) return ''
+  const pickDate = (a) => a.updatedAt || a.addedAt || a.createdAt || ''
+  let latest = props.articles[0]
+  for (const a of props.articles) {
+    const d = pickDate(a)
+    const cur = pickDate(latest)
+    if (d > cur || (d === cur && (a.order ?? 0) > (latest.order ?? 0))) latest = a
+  }
+  return latest.title
+})
 const dotType = computed(() => getCollectionDotType(props.collection.slug, props.collection.count))
 
 // Earliest addedAt among all articles in collection
