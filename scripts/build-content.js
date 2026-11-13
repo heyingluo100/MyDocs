@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const contentDir = path.join(root, 'content')
 const outputJson = path.join(root, '.content-cache', 'articles.json')
+const dataDir = path.join(root, '.content-cache', 'data', 'articles')
 const publicFiles = path.join(root, 'public', 'files')
 
 const md = new MarkdownIt({
@@ -113,6 +114,47 @@ function countWords(html) {
   return text.length
 }
 
+// 32 位字符串 hash —— 必须与前端 src/composables/useReadHistory.js 的 simpleHash 完全一致。
+// 老版本把整段 content 交给前端 simpleHash 存进 localStorage，用同一算法生成 contentHash，
+// 老读者的"已读记录"才不会全部失效（否则每篇都会弹"内容已更新"）。
+function simpleHash(str) {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i)
+    hash |= 0
+  }
+  return hash.toString(36)
+}
+
+// 把正文从 articles.json 里拆出去，按内容 hash 命名单独成文件：
+// - 首页/列表只需元数据（十几 KB），正文进文章时才按需拉取
+// - 文件名含 hash → 可安全设置一年 immutable 缓存，内容变了 URL 也变
+// - 加密文章的 content 是对象，用 JSON.stringify 参与 hash（与前端 contentKey 语义一致）
+function splitArticleContent(articles) {
+  fs.rmSync(dataDir, { recursive: true, force: true })
+  fs.mkdirSync(dataDir, { recursive: true })
+
+  let totalBytes = 0
+  for (const article of articles) {
+    const raw = article.content
+    if (raw === undefined) continue
+    const key = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    const fileName = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16) + '.json'
+    const filePath = path.join(dataDir, fileName)
+
+    if (!fs.existsSync(filePath)) {
+      const body = JSON.stringify({ slug: article.slug, content: raw })
+      fs.writeFileSync(filePath, body)
+      totalBytes += Buffer.byteLength(body)
+    }
+
+    article.contentHash = simpleHash(key)
+    article.contentFile = `data/articles/${fileName}`
+    delete article.content
+  }
+  return totalBytes
+}
+
 function slugify(str) {
   return str
     .toLowerCase()
@@ -209,6 +251,16 @@ function processText(filePath) {
   }
 }
 
+// 空索引：与正常构建保持同一结构，前端无需分支处理
+function writeEmptyIndex() {
+  fs.writeFileSync(outputJson, JSON.stringify({
+    allTags: [],
+    allCollections: [],
+    articles: [],
+    readerGuide: null
+  }, null, 2))
+}
+
 async function buildArticles() {
   // Ensure output directories exist
   fs.mkdirSync(path.dirname(outputJson), { recursive: true })
@@ -219,10 +271,22 @@ async function buildArticles() {
     // No content/ dir (e.g. CI environment) — use existing articles.json if available
     if (fs.existsSync(outputJson)) {
       console.log('[build-content] content/ 不存在，使用已有的 articles.json')
+      // 正文已拆分成独立文件，CI 环境必须拿到已提交的 data/ 目录，
+      // 否则线上会出现"正文加载失败"。这里提前报出来，别等上线才发现。
+      const existing = JSON.parse(fs.readFileSync(outputJson, 'utf-8'))
+      const missing = (existing.articles || []).filter(a => {
+        if (!a.contentFile) return false
+        return !fs.existsSync(path.join(root, '.content-cache', a.contentFile))
+      })
+      if (missing.length > 0) {
+        console.error(`[build-content] ❌ 有 ${missing.length} 篇正文文件缺失，请检查 .content-cache/data 是否已提交：`)
+        missing.slice(0, 5).forEach(a => console.error(`   - ${a.slug} → ${a.contentFile}`))
+        process.exitCode = 1
+      }
       return
     }
     fs.mkdirSync(contentDir, { recursive: true })
-    fs.writeFileSync(outputJson, JSON.stringify({ allTags: [], articles: [] }))
+    writeEmptyIndex()
     console.log('[build-content] content/ 目录为空，请创建分类文件夹并放入文档。')
     return
   }
@@ -376,7 +440,7 @@ async function buildArticles() {
   const tagFolders = entries.filter(e => e.isDirectory())
 
   if (tagFolders.length === 0) {
-    fs.writeFileSync(outputJson, '[]')
+    writeEmptyIndex()
     console.log('[build-content] content/ 下没有分类文件夹。请创建文件夹（如 content/工作/）并放入 .docx 或 .md 文件。')
     return
   }
@@ -556,9 +620,15 @@ async function buildArticles() {
     readerGuide = md.render(raw)
   }
 
+  // 正文拆分到 .content-cache/data/articles/，articles.json 只保留元数据 + contentFile/contentHash
+  const contentBytes = splitArticleContent(articles)
+
   const output = { allTags, allCollections: collections, articles, readerGuide }
   fs.writeFileSync(outputJson, JSON.stringify(output, null, 2))
   console.log(`[build-content] ✅ 构建完成：${articles.length} 篇文档，${tagFolders.length} 个分类，${collections.length} 个合集`)
+  if (contentBytes > 0) {
+    console.log(`[build-content] 📦 正文已拆分：${fs.readdirSync(dataDir).length} 个正文文件，共 ${(contentBytes / 1024).toFixed(0)}KB（按需加载）`)
+  }
   if (readerGuide) {
     console.log(`[build-content] 📖 已嵌入读者使用指南（首页折叠 banner）`)
   }

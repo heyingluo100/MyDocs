@@ -63,6 +63,20 @@ npm run build
 
 输出到 `dist/` 目录，可直接部署到任何静态托管服务。
 
+构建产物分两层，正文按需加载：
+
+```
+dist/
+├─ articles.json           # 文档索引（仅元数据：标题/标签/日期/字数/摘要）
+└─ data/articles/*.json    # 正文，文件名含内容 hash，进文章页才请求
+```
+
+首页只下载索引（61 篇文档约 70KB，gzip 18KB），点开文章时才取对应正文（单篇约 17KB，`immutable` 一年缓存）。旧版本把全部正文打包进 `articles.json`（1MB+），首屏要等整包下载完。
+
+> **注意**：`content/` 和 `.content-cache/` 默认不进 Git（保护个人文档）。如果托管平台是「连仓库自动构建」，构建环境拿不到 `content/`，需要二选一：
+> 1. 把 `content/` 从 `.gitignore` 移出并入库；
+> 2. 把 `.content-cache/articles.json` 与 `.content-cache/data/` 一并入库，作为 CI 的构建输入（构建脚本会校验正文文件是否齐全）。
+
 ## 内容保护
 
 6 层防护机制：

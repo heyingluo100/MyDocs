@@ -43,8 +43,8 @@ onBeforeUnmount(() => {
 
 const route = useRoute()
 const router = useRouter()
-const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy } = useArticles()
-const { hasUpdatedSinceLastRead, markAsRead, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
+const { getArticleBySlug, decodeContent, articles, getAdjacentArticles, sortBy, loadArticleContent, contentKeyOf, loaded } = useArticles()
+const { hasUpdatedSinceLastReadHash, markAsReadHash, saveReadingPosition, getReadingPosition, clearReadingPosition } = useReadHistory()
 const { markAsRead: markStatusRead } = useReadStatus()
 const { checkArticleAccess, isArticleUnlocked } = useInvitation()
 
@@ -171,6 +171,12 @@ const updateReason = ref('')
 const frozenContent = ref('')
 const frozenArticle = ref(null)
 
+// 正文按需加载状态
+const loadingArticle = ref(false)
+const contentLoadError = ref(false)
+// 加密文章的密文对象（正文拆分后不再挂在元数据上，解锁时需要原样传给校验逻辑）
+const encryptedPayload = ref(null)
+
 // Pending article: when history update detected, store latest for user to accept
 const pendingArticle = ref(null)
 
@@ -189,8 +195,7 @@ let isInitialLoad = true
 // Uses sessionStorage so it persists across page navigations
 const navContextTag = ref(sessionStorage.getItem('nav-context-tag') || '')
 
-// Helper: get a stable string key from content (works for both plain base64 and encrypted objects)
-const contentKey = (c) => typeof c === 'string' ? c : JSON.stringify(c)
+// Helper: 内容标记（构建期 contentHash，老数据回退到 content 本身）
 
 // Route change: freeze new article or detect history update
 watch(() => route.params.slug, async (newSlug, oldSlug) => {
@@ -216,13 +221,32 @@ watch(() => route.params.slug, async (newSlug, oldSlug) => {
   frozenArticle.value = null
   pendingArticle.value = null
   articleUnlocked.value = true
+  encryptedPayload.value = null
+  contentLoadError.value = false
 
   const current = getArticleBySlug(newSlug)
   if (!current) return
 
+  // 正文按需加载（articles.json 只有元数据）
+  loadingArticle.value = true
+  let rawContent = null
+  try {
+    rawContent = await loadArticleContent(current)
+  } catch (e) {
+    console.error('[ArticleView] 正文加载失败:', e)
+  }
+  // 快速连点翻篇时，丢弃过期请求的结果
+  if (route.params.slug !== newSlug) return
+  loadingArticle.value = false
+  if (rawContent == null) {
+    contentLoadError.value = true
+    return
+  }
+
   // Check article lock (encrypted content)
   if (current.locked && current.encrypted) {
-    const result = await checkArticleAccess(newSlug, current.content)
+    encryptedPayload.value = rawContent
+    const result = await checkArticleAccess(newSlug, rawContent)
     // Treat null content (article-lock disabled but article is encrypted) as not unlocked
     if (!result.unlocked || !result.content) {
       articleUnlocked.value = false
@@ -233,7 +257,7 @@ watch(() => route.params.slug, async (newSlug, oldSlug) => {
     // Decrypted successfully — use decrypted content
     frozenContent.value = result.content
     frozenArticle.value = { ...current }
-    markAsRead(newSlug, result.content)
+    markAsReadHash(newSlug, contentKeyOf(current))
     markStatusRead(newSlug, current.updatedAt || current.addedAt || current.createdAt)
     if (!isInitialLoad) {
       const pos = getReadingPosition(newSlug)
@@ -247,17 +271,17 @@ watch(() => route.params.slug, async (newSlug, oldSlug) => {
   }
 
   // On SPA navigation (not page refresh), check history for updates
-  if (!isInitialLoad && hasUpdatedSinceLastRead(newSlug, contentKey(current.content))) {
+  if (!isInitialLoad && hasUpdatedSinceLastReadHash(newSlug, contentKeyOf(current))) {
     updateReason.value = 'history'
-    pendingArticle.value = { ...current }
+    pendingArticle.value = { ...current, content: rawContent }
     showUpdatedDialog.value = true
     // Content changed — old position is meaningless
     clearReadingPosition(newSlug)
   } else {
     // Page refresh, first visit, or no changes — show latest directly
-    frozenContent.value = current.content
+    frozenContent.value = rawContent
     frozenArticle.value = { ...current }
-    markAsRead(newSlug, contentKey(current.content))
+    markAsReadHash(newSlug, contentKeyOf(current))
     markStatusRead(newSlug, current.updatedAt || current.addedAt || current.createdAt)
 
     // Check for saved reading position (only on SPA navigation, not page refresh)
@@ -295,9 +319,24 @@ watch(articles, async () => {
 
   // First load: articles just arrived from fetch — always show latest (this is a page refresh)
   if (!frozenContent.value && !frozenArticle.value) {
+    loadingArticle.value = true
+    let raw = null
+    try {
+      raw = await loadArticleContent(current)
+    } catch (e) {
+      console.error('[ArticleView] 正文加载失败:', e)
+    }
+    if (route.params.slug !== slug) return
+    loadingArticle.value = false
+    if (raw == null) {
+      contentLoadError.value = true
+      return
+    }
+
     // Check article lock on first load too
     if (current.locked && current.encrypted) {
-      const result = await checkArticleAccess(slug, current.content)
+      encryptedPayload.value = raw
+      const result = await checkArticleAccess(slug, raw)
       if (!result.unlocked || !result.content) {
         articleUnlocked.value = false
         frozenArticle.value = { ...current }
@@ -305,20 +344,18 @@ watch(articles, async () => {
       }
       frozenContent.value = result.content
       frozenArticle.value = { ...current }
-      markAsRead(slug, result.content)
+      markAsReadHash(slug, contentKeyOf(current))
       return
     }
-    frozenContent.value = current.content
+    frozenContent.value = raw
     frozenArticle.value = { ...current }
-    markAsRead(slug, contentKey(current.content))
+    markAsReadHash(slug, contentKeyOf(current))
     return
   }
 
-  // Realtime update: same article, content changed while viewing
-  // For encrypted articles, compare the stringified encrypted object
-  const currentCK = contentKey(current.content)
-  const frozenCK = frozenContent.value
-  if (frozenContent.value && currentCK !== frozenCK) {
+  // Realtime update: same article, content changed while viewing.
+  // Compare build-time content hashes — no need to hold the whole content in memory.
+  if (frozenArticle.value && contentKeyOf(current) !== contentKeyOf(frozenArticle.value)) {
     updateReason.value = 'realtime'
     pendingArticle.value = { ...current }
     showUpdatedDialog.value = true
@@ -339,25 +376,37 @@ const handleConfirmDeleted = () => {
 }
 
 // "Yes" - show latest content
-const handleRefreshNow = () => {
+const handleRefreshNow = async () => {
   showUpdatedDialog.value = false
   const latest = pendingArticle.value || article.value
   if (latest) {
-    frozenContent.value = latest.content
-    frozenArticle.value = { ...latest }
-    markAsRead(latest.slug, contentKey(latest.content))
+    let raw = latest.content !== undefined ? latest.content : null
+    if (raw == null) {
+      try { raw = await loadArticleContent(latest) } catch { raw = null }
+    }
+    if (raw != null) {
+      frozenContent.value = raw
+      frozenArticle.value = { ...latest }
+      markAsReadHash(latest.slug, contentKeyOf(latest))
+    }
   }
   pendingArticle.value = null
 }
 
 // "No" - keep old content (or skip if history)
-const handleRefreshLater = () => {
+const handleRefreshLater = async () => {
   showUpdatedDialog.value = false
   // If history dialog and nothing frozen yet, still need to show something
   if (!frozenContent.value && pendingArticle.value) {
-    frozenContent.value = pendingArticle.value.content
-    frozenArticle.value = { ...pendingArticle.value }
-    // Don't markAsRead — user chose "later", next visit will ask again
+    let raw = pendingArticle.value.content !== undefined ? pendingArticle.value.content : null
+    if (raw == null) {
+      try { raw = await loadArticleContent(pendingArticle.value) } catch { raw = null }
+    }
+    if (raw != null) {
+      frozenContent.value = raw
+      frozenArticle.value = { ...pendingArticle.value }
+      // Don't markAsRead — user chose "later", next visit will ask again
+    }
   }
   pendingArticle.value = null
 }
@@ -387,7 +436,7 @@ const handleArticleUnlocked = (decryptedContent) => {
   if (current) {
     frozenContent.value = decryptedContent
     frozenArticle.value = { ...current }
-    markAsRead(slug, decryptedContent)
+    markAsReadHash(slug, contentKeyOf(current))
     markStatusRead(slug, current.updatedAt || current.addedAt || current.createdAt)
     const pos = getReadingPosition(slug)
     if (pos) {
@@ -400,7 +449,11 @@ const handleArticleUnlocked = (decryptedContent) => {
 // Navigation: check lock before jumping
 const handleNavTo = async (target) => {
   if (target.locked && target.encrypted) {
-    const result = await checkArticleAccess(target.slug, target.content)
+    let payload = target.content
+    if (payload === undefined) {
+      try { payload = await loadArticleContent(target) } catch { payload = null }
+    }
+    const result = await checkArticleAccess(target.slug, payload)
     if (!result.unlocked) {
       pendingNavTarget.value = target
       showLockedNavDialog.value = true
@@ -566,7 +619,7 @@ const adjacent = computed(() => {
     <ArticleLockOverlay
       v-if="displayArticle?.locked && !articleUnlocked"
       :title="displayArticle.title"
-      :encrypted-content="displayArticle.content"
+      :encrypted-content="encryptedPayload || displayArticle.content"
       :slug="displayArticle.slug"
       @unlocked="handleArticleUnlocked"
     />
@@ -678,6 +731,24 @@ const adjacent = computed(() => {
         <div v-else class="flex-1"></div>
       </div>
     </nav>
+  </div>
+
+  <!-- 正文加载中 / 加载失败 -->
+  <div v-else-if="!showDeletedDialog && (loadingArticle || !loaded)" class="max-w-3xl mx-auto animate-pulse">
+    <div class="h-4 w-20 bg-linear-bg-tertiary rounded mb-6"></div>
+    <div class="h-8 w-3/4 bg-linear-bg-tertiary rounded mb-4"></div>
+    <div class="h-3 w-1/3 bg-linear-bg-tertiary rounded mb-10"></div>
+    <div class="space-y-3">
+      <div class="h-3 w-full bg-linear-bg-tertiary rounded"></div>
+      <div class="h-3 w-11/12 bg-linear-bg-tertiary rounded"></div>
+      <div class="h-3 w-full bg-linear-bg-tertiary rounded"></div>
+      <div class="h-3 w-4/5 bg-linear-bg-tertiary rounded"></div>
+    </div>
+  </div>
+
+  <div v-else-if="contentLoadError" class="text-center py-20">
+    <p class="text-linear-text-secondary">正文加载失败，请检查网络后重试</p>
+    <button @click="() => { contentLoadError = false; $router.replace({ path: `/article/${route.params.slug}`, force: true }) }" class="text-linear-accent text-sm mt-2">重新加载</button>
   </div>
 
   <div v-else-if="!showDeletedDialog" class="text-center py-20">

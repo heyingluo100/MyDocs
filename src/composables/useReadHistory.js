@@ -40,6 +40,22 @@ export function useReadHistory() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
   }
 
+  // 直接使用构建期算好的 contentHash（与 simpleHash(整段 content) 同算法，
+  // 因此老 localStorage 记录无需迁移即可继续匹配）
+  function hasUpdatedSinceLastReadHash(slug, hash) {
+    if (!hash) return false
+    const history = getHistory()
+    if (!history[slug]) return false
+    return history[slug] !== hash
+  }
+
+  function markAsReadHash(slug, hash) {
+    if (!hash) return
+    const history = getHistory()
+    history[slug] = hash
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+  }
+
   // Reading position tracking
   function saveReadingPosition(slug, progress) {
     if (progress < 5 || progress > 90) return
@@ -69,6 +85,8 @@ export function useReadHistory() {
   return {
     hasUpdatedSinceLastRead,
     markAsRead,
+    hasUpdatedSinceLastReadHash,
+    markAsReadHash,
     saveReadingPosition,
     getReadingPosition,
     clearReadingPosition

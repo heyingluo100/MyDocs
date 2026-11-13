@@ -16,6 +16,8 @@ function updateData(newData) {
   readerGuide.value = newData.readerGuide || ''
   loaded.value = true
   loadError.value = false
+  // 开发期内容热更新后，旧正文缓存可能已失效（只有 dev 会重复走到这里）
+  if (import.meta.env.DEV && typeof clearContentCache === 'function') clearContentCache()
 }
 
 // Initial load via fetch (not import, so Vite won't HMR it)
@@ -30,6 +32,56 @@ fetch('/articles.json')
     loaded.value = true
     loadError.value = true
   })
+
+// ── 正文按需加载 ──
+// articles.json 只含元数据，正文放在 contentFile 指向的独立文件里（文件名含内容 hash）。
+// 缓存按 contentFile 做 key：内容一变文件路径就变，天然不会读到旧缓存。
+const contentCache = new Map()
+const inflight = new Map()
+
+async function loadArticleContent(article) {
+  if (!article) return null
+  // 兼容旧数据（articles.json 里还内联 content 的版本）
+  if (!article.contentFile) return article.content || null
+
+  const key = article.contentFile
+  if (contentCache.has(key)) return contentCache.get(key)
+  if (inflight.has(key)) return inflight.get(key)
+
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const url = `${base}/${key}`
+  const p = fetch(url)
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
+    .then(data => {
+      const content = data.content
+      contentCache.set(key, content)
+      inflight.delete(key)
+      return content
+    })
+    .catch(err => {
+      inflight.delete(key)
+      throw err
+    })
+  inflight.set(key, p)
+  return p
+}
+
+function clearContentCache() {
+  contentCache.clear()
+  inflight.clear()
+}
+
+// 内容标记：优先用构建期算好的 contentHash，避免每次把整段正文交给 hash 函数
+function contentKeyOf(article) {
+  if (!article) return ''
+  if (article.contentHash) return article.contentHash
+  const c = article.content
+  if (c === undefined) return ''
+  return typeof c === 'string' ? c : JSON.stringify(c)
+}
 
 // Listen for HMR content updates in dev mode
 if (import.meta.hot) {
@@ -125,6 +177,9 @@ export function useArticles() {
     getArticlesByCollection,
     getCollectionBySlug,
     getAdjacentArticles,
-    decodeContent
+    decodeContent,
+    loadArticleContent,
+    clearContentCache,
+    contentKeyOf
   }
 }

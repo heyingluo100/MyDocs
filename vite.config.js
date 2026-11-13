@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const contentDir = path.join(__dirname, 'content')
 const outputJson = path.join(__dirname, '.content-cache', 'articles.json')
+const dataDir = path.join(__dirname, '.content-cache', 'data')
 
 function rebuildContent() {
   try {
@@ -16,6 +17,17 @@ function rebuildContent() {
     execSync('node scripts/build-content.js', { stdio: 'inherit' })
   } catch (e) {
     console.error('[build-content] 构建失败:', e.message)
+  }
+}
+
+// 逐文件递归复制（Windows 上 fs.cpSync 在部分磁盘/Node 版本会异常退出）
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name)
+    const d = path.join(dest, entry.name)
+    if (entry.isDirectory()) copyDirSync(s, d)
+    else if (entry.isFile()) fs.copyFileSync(s, d)
   }
 }
 
@@ -28,15 +40,18 @@ export default defineConfig({
       buildStart() {
         rebuildContent()
       },
-      // Copy articles.json to dist/ during production build
+      // Copy articles.json + data/ (split article contents) to dist/ during production build
       closeBundle() {
         const distPath = path.join(__dirname, 'dist', 'articles.json')
         if (fs.existsSync(outputJson)) {
           fs.copyFileSync(outputJson, distPath)
         }
+        if (fs.existsSync(dataDir)) {
+          copyDirSync(dataDir, path.join(__dirname, 'dist', 'data'))
+        }
       },
       configureServer(server) {
-        // Serve articles.json ourselves (not from public/)
+        // Serve articles.json + data/ ourselves (not from public/)
         server.middlewares.use((req, res, next) => {
           if (req.url === '/articles.json') {
             try {
@@ -45,6 +60,20 @@ export default defineConfig({
               res.setHeader('Cache-Control', 'no-cache')
               res.end(data)
             } catch {
+              res.statusCode = 404
+              res.end('{}')
+            }
+            return
+          }
+          // 按需加载的正文文件：/data/articles/<hash>.json
+          if (req.url.startsWith('/data/')) {
+            const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/data\//, '')
+            const filePath = path.join(dataDir, rel)
+            if (filePath.startsWith(dataDir) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+              res.setHeader('Content-Type', 'application/json')
+              res.setHeader('Cache-Control', 'no-cache')
+              res.end(fs.readFileSync(filePath, 'utf-8'))
+            } else {
               res.statusCode = 404
               res.end('{}')
             }
