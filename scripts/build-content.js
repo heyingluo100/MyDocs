@@ -91,7 +91,7 @@ function getFileDates(filePath) {
   }
 }
 
-// 提取 docx 的真实创作日期；取不到返回空字符串（不 fallback 到 git 日期）
+// 提取 docx 的真实创作日期；取不到返回空字符串
 async function getDocxOriginalCreatedAt(filePath) {
   try {
     const buffer = fs.readFileSync(filePath)
@@ -103,6 +103,40 @@ async function getDocxOriginalCreatedAt(filePath) {
   } catch {
     return ''
   }
+}
+
+function formatDate(d) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+// 文件创建时间（Windows NTFS 上是真实创建时间；Linux/macOS 常退化为 mtime）。
+// 注意：文件被复制、解压、重新 clone 后 birthtime 会变成"复制那一刻"，
+// 所以它只作兜底，显式元数据（docx core.xml / md frontmatter）优先。
+function getBirthDate(filePath) {
+  try {
+    const t = fs.statSync(filePath).birthtime
+    if (!t || isNaN(t.getTime())) return ''
+    const y = t.getFullYear()
+    if (y < 1990 || y > new Date().getFullYear() + 1) return '' // 无效时间直接丢弃
+    return formatDate(t)
+  } catch {
+    return ''
+  }
+}
+
+// 允许 2024-03-01 / 2024/3/1 / 2024-03-01T10:00 等写法，统一成 YYYY-MM-DD
+function normalizeDate(value) {
+  if (!value) return ''
+  if (value instanceof Date) return isNaN(value.getTime()) ? '' : formatDate(value)
+  const m = String(value).match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (!m) return ''
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+}
+
+// createdAt 取值优先级：显式元数据 → 文件创建时间 → 加入日期兜底
+function resolveCreatedAt(explicit, filePath, addedAt) {
+  return normalizeDate(explicit) || getBirthDate(filePath) || addedAt || ''
 }
 
 function trimTrailingEmpty(html) {
@@ -168,11 +202,14 @@ async function processMarkdown(filePath) {
   const raw = fs.readFileSync(filePath, 'utf-8')
   const { data: frontmatter, content } = matter(raw)
   const htmlContent = md.render(content)
+  const fileDates = getFileDates(filePath)
+  // md 没有内嵌元数据，允许 frontmatter 手写创作日期（推荐：复制文件也不会丢）
+  const explicitCreated = frontmatter.date || frontmatter.created || frontmatter.createdAt
   return {
     title: frontmatter.title || path.basename(filePath, path.extname(filePath)),
     summary: frontmatter.summary || '',
-    ...getFileDates(filePath),
-    createdAt: '',
+    ...fileDates,
+    createdAt: resolveCreatedAt(explicitCreated, filePath, fileDates.addedAt),
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -205,7 +242,7 @@ async function processDocx(filePath) {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
     ...fileDates,
-    createdAt: originalCreatedAt,
+    createdAt: resolveCreatedAt(originalCreatedAt, filePath, fileDates.addedAt),
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -223,11 +260,12 @@ async function processDoc(filePath) {
     return `<p>${line}</p>`
   }).join('\n')
 
+  const fileDates = getFileDates(filePath)
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    ...getFileDates(filePath),
-    createdAt: '',
+    ...fileDates,
+    createdAt: resolveCreatedAt('', filePath, fileDates.addedAt),
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -242,11 +280,12 @@ function processText(filePath) {
     if (!line.trim()) return '<p><br></p>'
     return `<p>${line}</p>`
   }).join('\n')
+  const fileDates = getFileDates(filePath)
   return {
     title,
     summary: summary.length >= 100 ? summary + '...' : summary,
-    ...getFileDates(filePath),
-    createdAt: '',
+    ...fileDates,
+    createdAt: resolveCreatedAt('', filePath, fileDates.addedAt),
     content: trimTrailingEmpty(htmlContent)
   }
 }
@@ -421,11 +460,12 @@ async function buildArticles() {
       fs.copyFileSync(filePath, path.join(publicFiles, file))
       filesCopied++
       const otherContent = `<p>此文档为 ${ext.replace('.', '').toUpperCase()} 文件，请点击下方附件查看。</p>`
+      const otherDates = getFileDates(filePath)
       return {
         slug, title: baseName, tags: [...tags], locked, lockHash, pinned, pinOrder, pinTag, authorNote, authorNotePosition,
         collection: collection || null, collectionSlug: collectionSlug || null,
-        ...getFileDates(filePath),
-        createdAt: '',
+        ...otherDates,
+        createdAt: resolveCreatedAt('', filePath, otherDates.addedAt),
         summary: `${ext.replace('.', '').toUpperCase()} 文件`,
         files: [file],
         wordCount: countWords(otherContent),

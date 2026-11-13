@@ -4,13 +4,11 @@ import { useRoute } from 'vue-router'
 import { useArticles } from '../composables/useArticles.js'
 
 const route = useRoute()
-const { allTags } = useArticles()
+const { allTags, totalArticleCount: totalCount } = useArticles()
 
 const currentTag = computed(() => {
   return route.params.tag ? decodeURIComponent(route.params.tag) : ''
 })
-
-const totalCount = computed(() => allTags.value.reduce((s, t) => s + t.count, 0))
 </script>
 
 <template>

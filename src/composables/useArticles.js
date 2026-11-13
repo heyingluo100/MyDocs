@@ -107,6 +107,10 @@ export function useArticles() {
 
   const allCollections = computed(() => collectionList.value)
 
+  // 文档总数：去重后的真实篇数。
+  // 不能用 allTags 的 count 求和 —— 一篇文档挂多个标签（`.tags` 副标签）会在每个标签里各计一次。
+  const totalArticleCount = computed(() => articles.value.length)
+
   const getArticlesByTag = (tag) => {
     if (!tag) return articles.value
     return articles.value.filter(a => a.tags.includes(tag))
@@ -168,6 +172,7 @@ export function useArticles() {
     articles,
     allTags,
     allCollections,
+    totalArticleCount,
     readerGuide,
     loaded,
     loadError,

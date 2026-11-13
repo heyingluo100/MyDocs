@@ -19,8 +19,28 @@ const SORT_OPTIONS = [
   { by: 'added', dir: 'desc', label: '最近加入' },
   { by: 'added', dir: 'asc', label: '最早加入' },
   { by: 'updated', dir: 'desc', label: '最近更新' },
-  { by: 'updated', dir: 'asc', label: '最早更新' }
+  { by: 'updated', dir: 'asc', label: '最早更新' },
+  { by: 'created', dir: 'desc', label: '最近创作' },
+  { by: 'created', dir: 'asc', label: '最早创作' }
 ]
+
+// 单篇排序日期：创作时间优先取文档真实创作日期，取不到回退加入日期
+const pickDate = (a) => {
+  if (sortBy.value === 'updated') return a.updatedAt || a.addedAt || a.createdAt || ''
+  if (sortBy.value === 'created') return a.createdAt || a.addedAt || ''
+  return a.addedAt || a.createdAt || ''
+}
+
+// 合集排序日期：合集含多章时取代表值。
+// 按创作时间「最早」排时必须取最早的一章，否则整卷都会被最新章节的日期顶到最后。
+const pickCollectionDate = (list) => {
+  const dates = list.map(pickDate).filter(Boolean)
+  if (dates.length === 0) return ''
+  const useMin = sortBy.value === 'created' && sortDir.value === 'asc'
+  return useMin
+    ? dates.reduce((m, d) => (d < m ? d : m))
+    : dates.reduce((m, d) => (d > m ? d : m))
+}
 
 const sortLabel = computed(() =>
   SORT_OPTIONS.find(o => o.by === sortBy.value && o.dir === sortDir.value)?.label || '最近加入'
@@ -61,22 +81,12 @@ const mixedItems = computed(() => {
   for (const col of relevantCollections) {
     const colArticles = articles.filter(a => a.collectionSlug === col.slug)
     if (colArticles.length === 0) continue
-    const pickDate = (a) => {
-      if (sortBy.value === 'updated') return a.updatedAt || a.addedAt || a.createdAt || ''
-      return a.addedAt || a.createdAt || ''
-    }
-    const sortDate = colArticles.reduce((max, a) => {
-      const d = pickDate(a)
-      return d > max ? d : max
-    }, pickDate(colArticles[0]))
+    const sortDate = pickCollectionDate(colArticles)
     items.push({ type: 'collection', collection: col, articles: colArticles, sortDate })
   }
 
   for (const article of standaloneArticles) {
-    const sortDate = sortBy.value === 'updated'
-      ? (article.updatedAt || article.addedAt || article.createdAt || '')
-      : (article.addedAt || article.createdAt || '')
-    items.push({ type: 'article', article, sortDate })
+    items.push({ type: 'article', article, sortDate: pickDate(article) })
   }
 
   const tag = currentTag.value

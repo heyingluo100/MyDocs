@@ -9,13 +9,12 @@ const props = defineProps({
 })
 
 const route = useRoute()
-const { allTags } = useArticles()
+const { allTags, totalArticleCount: totalCount } = useArticles()
 
 const open = ref(false)
 const wrapperRef = ref(null)
 
 const currentTag = computed(() => props.activeTag || route.params.tag || '')
-const totalCount = computed(() => allTags.value.reduce((s, t) => s + t.count, 0))
 
 const toggle = () => {
   open.value = !open.value

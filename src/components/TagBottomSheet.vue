@@ -11,10 +11,9 @@ const props = defineProps({
 const emit = defineEmits(['update:open'])
 
 const route = useRoute()
-const { allTags } = useArticles()
+const { allTags, totalArticleCount: totalCount } = useArticles()
 
 const currentTag = computed(() => props.activeTag || route.params.tag || '')
-const totalCount = computed(() => allTags.value.reduce((s, t) => s + t.count, 0))
 
 const close = () => {
   emit('update:open', false)
